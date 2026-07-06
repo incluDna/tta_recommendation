@@ -162,7 +162,7 @@ unmapped     = res["unmapped"]
 # ─────────────────────────────────────────────────────────────────
 # HEADER
 # ─────────────────────────────────────────────────────────────────
-st.title("🛵 Rider Accident — Campaign Recommendation Dashboard")
+st.title("🛵 Rider Accident — TTA Campaign Recommendation Dashboard")
 st.caption(
     f"ไฟล์: **{sel_file}** | Sheet: **{sel_sheet}** | "
     f"Data: **{len(df):,}** | พื้นที่: **{len(area)}** แห่ง"

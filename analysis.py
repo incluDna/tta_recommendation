@@ -474,14 +474,25 @@ def build_area_summary(df: pd.DataFrame) -> pd.DataFrame:
 
     # 5.7 Reason + Insight
     def generate_reason(row):
-        return (
-            f"พื้นที่นี้มีความเสี่ยงอยู่ในระดับ {row['priority_level']} "
-            f"(Risk Score {row['risk_score']:.1f}) "
-            f"แม้ว่าสาเหตุที่พบมากที่สุดจะเป็น '{row['dominant_theme']}' "
-            f"แต่เมื่อพิจารณาความถี่ร่วมกับระดับความรุนแรง "
-            f"พบว่า '{row['recommended_campaign']}' มีความสำคัญมากกว่า "
-            f"จึงควรได้รับการรณรงค์เป็นอันดับแรก"
-        )
+        if row["dominant_theme"] == row["recommended_campaign"]:
+        # theme ที่เจอบ่อยสุด กับ theme ที่แนะนำ เป็นตัวเดียวกัน → ใช้ "เช่นกัน" ไม่ใช่ "แต่"
+            return (
+                f"พื้นที่นี้มีความเสี่ยงอยู่ในระดับ {row['priority_level']} "
+                f"(Risk Score {row['risk_score']:.1f}) "
+                f"สาเหตุที่พบมากที่สุดคือ '{row['dominant_theme']}' "
+                f"และเมื่อพิจารณาความถี่ร่วมกับระดับความรุนแรงแล้ว "
+                f"'{row['recommended_campaign']}' ก็ยังคงเป็นประเด็นสำคัญที่สุดเช่นกัน "
+                f"จึงควรได้รับการรณรงค์เป็นอันดับแรก"
+            )
+        else:
+            return (
+                f"พื้นที่นี้มีความเสี่ยงอยู่ในระดับ {row['priority_level']} "
+                f"(Risk Score {row['risk_score']:.1f}) "
+                f"แม้ว่าสาเหตุที่พบมากที่สุดจะเป็น '{row['dominant_theme']}' "
+                f"แต่เมื่อพิจารณาความถี่ร่วมกับระดับความรุนแรง "
+                f"พบว่า '{row['recommended_campaign']}' มีความสำคัญมากกว่า "
+                f"จึงควรได้รับการรณรงค์เป็นอันดับแรก"
+            )
 
 
     def generate_insight(row):
