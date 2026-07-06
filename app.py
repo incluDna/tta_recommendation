@@ -68,6 +68,7 @@ with st.sidebar:
     if uploaded is not None:
         save_path = Path(DATA_DIR) / uploaded.name
         # เตือนถ้าชื่อไฟล์ซ้ำของเดิม (จะถูก overwrite)
+        Path(DATA_DIR).mkdir(parents=True, exist_ok=True)
         if save_path.exists():
             st.warning(f"⚠️ ไฟล์ '{uploaded.name}' มีอยู่แล้ว จะถูกเขียนทับ")
         with open(save_path, "wb") as f:
