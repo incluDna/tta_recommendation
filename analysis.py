@@ -577,7 +577,29 @@ def apply_rider_insurance(df: pd.DataFrame) -> pd.DataFrame:
 
     df["insurance_recommendation"] = df.apply(_get, axis=1)
     return df
+# ═══════════════════════════════════════════════════════════════════
+# 6.5 PERSONALIZED OUTPUT (แนบชื่อพนักงานกลับเข้า recommendation)
+# ═══════════════════════════════════════════════════════════════════
 
+def build_personalized_output(raw: pd.DataFrame, df: pd.DataFrame) -> pd.DataFrame:
+    """
+    เอาไฟล์ดิบที่มีชื่อ-รหัสพนักงานอยู่แล้ว (raw)
+    มาแปะ column recommendation ที่คำนวณจาก df (cleaned) ต่อท้าย
+      - Campaign ที่ควรได้รับ (มาจาก cause จริงที่เกิดกับคนนั้น)
+      - ประกันที่แนะนำ (มาจาก theme + ความรุนแรงของคนนั้น)
+    ไม่ต้อง join กับไฟล์อื่นเลย เพราะ raw กับ df แถวเรียงตรงกันอยู่แล้ว
+    """
+    result = raw.copy()
+    rename_map = {
+        COL_CAUSE:                 "สาเหตุที่เกิดขึ้นจริง",
+        "campaign_theme":          "Campaign ที่แนะนำ",
+        "insurance_recommendation": "ประกันที่แนะนำ",
+    }
+    for src_col, out_col in rename_map.items():
+        if src_col in df.columns:
+            result[out_col] = df[src_col].values
+
+    return result
 
 # ═══════════════════════════════════════════════════════════════════
 # 7. JOIN WITH PERSONAL DATA (PII — save to output only)
@@ -681,6 +703,7 @@ def run_pipeline(
     -------
     {
         "df":           pd.DataFrame,   # rider-level (no PII)
+        "raw_with_id":  pd.DataFrame,   # for join_personal_data (PII) only
         "area_summary": pd.DataFrame,
         "unmapped":     pd.DataFrame,
         "saved_files":  dict[str, str],
@@ -693,6 +716,8 @@ def run_pipeline(
     raw = load_raw(data_folder, data_filename, data_sheet)
     df, col_report = clean(raw)
     df  = feature_engineer(df)
+
+    raw_with_id, _ = resolve_columns(raw.copy())
 
     # Theme mapping
     df, unmapped = apply_theme_mapping(df)
@@ -709,7 +734,7 @@ def run_pipeline(
     if bank_folder and bank_filename:
         try:
             df_joined = join_personal_data(
-                df, bank_folder, bank_filename, bank_sheet
+                raw_with_id, bank_folder, bank_filename, bank_sheet
             )
         except Exception as e:
             print(f"⚠️  Join PII failed: {e}")
@@ -722,6 +747,7 @@ def run_pipeline(
 
     return {
         "df":           df,
+        "raw_with_id":  raw_with_id,
         "area_summary": area_summary,
         "unmapped":     unmapped,
         "saved_files":  saved,

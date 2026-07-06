@@ -10,7 +10,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
 
-from analysis import get_sheet_names, list_excel_files, run_pipeline
+from analysis import build_personalized_output, get_sheet_names, list_excel_files, run_pipeline, join_personal_data, export_outputs
 from config import COL_AREA, COL_CAUSE, COL_SEVERITY, OUTPUT_DIR, THEMES
 
 st.set_page_config(
@@ -91,8 +91,8 @@ with st.sidebar:
     run_btn = st.button("▶️ รัน Analysis", use_container_width=True, type="primary")
 
     st.markdown("---")
-    st.subheader("🔐 Join ข้อมูลส่วนตัว")
-    use_pii   = st.checkbox("Join กับ bank.xlsx", value=False)
+    st.subheader("🔐 Merge ข้อมูลส่วนตัว")
+    use_pii   = st.checkbox("Merge ข้อมูลส่วนตัว", value=False)
     sel_bank  = sel_bank_sheet = None
     if use_pii:
         bank_files = list_excel_files(DATA_DIR)
@@ -102,7 +102,26 @@ with st.sidebar:
                 "Sheet PII", get_sheet_names(DATA_DIR, sel_bank), key="bank_sheet"
             )
             st.info("📁 บันทึกใน output/ เท่านั้น — ไม่แสดงบน dashboard")
-            st.button("▶️ รัน joined excel", use_container_width=True, type="primary")
+            run_joined_btn = st.button("▶️ รัน merged excel", use_container_width=True, type="primary")
+
+            if run_joined_btn:
+                if "result" not in st.session_state:
+                    st.error("⚠️ กรุณากด '▶️ รัน Analysis' ก่อน แล้วค่อยกดปุ่มนี้")
+                elif "raw_with_id" not in st.session_state["result"]:
+                    st.error("⚠️ กรุณากด '▶️ รัน Analysis' ใหม่อีกครั้ง (analysis.py อัปเดตแล้ว)")
+                else:
+                    res = st.session_state["result"]
+                    personalized = build_personalized_output(res["raw_with_id"], res["df"])   # ← ตัด area_summary ออก
+
+                    buf = io.BytesIO()
+                    personalized.to_excel(buf, index=False)
+                    st.success("✅ สร้างไฟล์สำเร็จ")
+                    st.download_button(
+                        "⬇️ ดาวน์โหลด Personalized Recommendation",
+                        data=buf.getvalue(),
+                        file_name=f"personalized_recommendation_{sel_file}",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    )
 
     # st.markdown("---")
     # run_btn = st.button("▶️ รัน joined excel", use_container_width=True, type="primary")
