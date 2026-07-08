@@ -352,7 +352,7 @@ with tab_dash:
                 f"""<div style="border-left:4px solid {color};padding:8px 12px;
                 margin-bottom:8px;border-radius:4px;background:rgba(0,0,0,0.05)">
                 <b>{icon} {theme}</b><br>
-                <span style="font-size:0.85rem;color:#aaa">{desc}</span>
+                <span style="font-size:0.85rem;color:#000000">{desc}</span>
                 </div>""",
                 unsafe_allow_html=True,
             )
