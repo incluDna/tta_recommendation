@@ -10,8 +10,8 @@ import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
 
-from analysis import build_personalized_output, get_sheet_names, list_excel_files, run_pipeline, join_personal_data, export_outputs
-from config import COL_AREA, COL_CAUSE, COL_SEVERITY, OUTPUT_DIR, THEMES
+from analysis import build_personalized_output, get_sheet_names, list_excel_files, run_pipeline, join_personal_data, export_outputs, natural_sort_key, get_month_order, build_area_summary, attach_cause_detail
+from config import COL_AREA, COL_CAUSE, COL_SEVERITY, COL_MONTH, OUTPUT_DIR, THEMES
 
 st.set_page_config(
     page_title="Rider Accident Dashboard",
@@ -155,7 +155,7 @@ if "result" not in st.session_state or run_btn:
             st.stop()
 
 res          = st.session_state["result"]
-df           = res["df"]
+df_full      = res["df"]
 area         = res["area_summary"]
 unmapped     = res["unmapped"]
 
@@ -164,9 +164,49 @@ unmapped     = res["unmapped"]
 # ─────────────────────────────────────────────────────────────────
 st.title("🛵 Rider Accident — TTA Campaign Recommendation Dashboard")
 st.caption(
-    f"ไฟล์: **{sel_file}** | Sheet: **{sel_sheet}** | "
-    f"Data: **{len(df):,}** | พื้นที่: **{len(area)}** แห่ง"
-)
+    f"ไฟล์: **{sel_file}** | Sheet: **{sel_sheet}**")
+# ─────────────────────────────────────────────────────────────────
+# FILTER: เลือกเดือน / พื้นที่ — กรองทั้งหน้าตามที่เลือก (อยู่ติดแถบ tab)
+# ─────────────────────────────────────────────────────────────────
+f1, f2 = st.columns(2)
+ 
+with f1:
+    if COL_MONTH in df_full.columns:
+        month_opts = get_month_order(df_full[COL_MONTH])
+        sel_months = st.multiselect(
+            "📅 เลือกเดือน", options=month_opts, default=month_opts,
+            placeholder="เลือกเดือน (ค่าเริ่มต้น: ทั้งหมด)",
+        )
+    else:
+        sel_months = None
+ 
+with f2:
+    if COL_AREA in df_full.columns:
+        area_opts = sorted(df_full[COL_AREA].dropna().unique().tolist(), key=natural_sort_key)
+        sel_areas = st.multiselect(
+            "📍 เลือกพื้นที่", options=area_opts, default=area_opts,
+            placeholder="เลือกพื้นที่ (ค่าเริ่มต้น: ทั้งหมด)",
+        )
+    else:
+        sel_areas = None
+ 
+# กรอง df ตามที่เลือก (ถ้าไม่เลือกอะไรเลย = โชว์ทั้งหมด กันหน้าว่างเปล่า)
+df = df_full.copy()
+if sel_months is not None and len(sel_months) > 0:
+    df = df[df[COL_MONTH].isin(sel_months)]
+if sel_areas is not None and len(sel_areas) > 0:
+    df = df[df[COL_AREA].isin(sel_areas)]
+ 
+if df.empty:
+    st.warning("⚠️ ไม่มีข้อมูลตรงกับตัวกรองที่เลือก ลองเลือกเดือน/พื้นที่เพิ่ม")
+    st.stop()
+ 
+# recompute area summary ใหม่จากข้อมูลที่กรองแล้ว (เดิมคำนวณจากข้อมูลทั้งหมด)
+area = build_area_summary(df)
+area = attach_cause_detail(area, df, top_n=3)
+ 
+st.caption(f"Data: **{len(df):,}** / {len(df_full):,} | พื้นที่: **{len(area)}** แห่ง")
+ 
 if not unmapped.empty:
     with st.expander(f"⚠️ พบ {len(unmapped)} สาเหตุที่ยัง map ไม่ได้"):
         st.dataframe(unmapped, use_container_width=True, hide_index=True)
@@ -283,6 +323,19 @@ with tab_dash:
                 use_container_width=True, config={"displayModeBar": False}
             )
 
+    # ── เดือนที่เกิดเหตุ (เรียงตามปฏิทิน ไม่ใช่ตัวอักษร) ──────────────
+    if COL_MONTH in df.columns:
+        month_order = get_month_order(df[COL_MONTH])
+        mg = df[COL_MONTH].value_counts().reindex(month_order).reset_index()
+        mg.columns = ["เดือน", "จำนวน"]
+        fig_month = px.bar(
+            mg, x="เดือน", y="จำนวน", title="อุบัติเหตุตามเดือน",
+            color_discrete_sequence=["#16a085"],
+            category_orders={"เดือน": month_order},   # ← เรียง Jan → Dec ตามปฏิทิน
+        )
+        fig_month.update_layout(height=340, margin=dict(t=40, b=10))
+        st.plotly_chart(fig_month, use_container_width=True, config={"displayModeBar": False})
+    
     st.markdown("---")
 
     # ── Section 2: Theme card + Risk Score definition ──────────────
@@ -601,11 +654,14 @@ with tab_campaign:
             "recommended_campaign", "recommended_campaign_detail", "supporting_campaigns",
             "confidence", "insurance_recommendation",
         ]
-        tbl = area[[c for c in show_cols if c in area.columns]].copy()
+        tbl = area[[c for c in show_cols if c in area.columns]].reset_index()
         tbl["priority_level"] = tbl["priority_level"].astype(str)
+        tbl = tbl.sort_values(COL_AREA, key=lambda s: s.map(natural_sort_key))  # default: เรียงตามพื้นที่แบบ natural sort
+        st.caption("💡 คลิกหัวตาราง (เช่น 'พื้นที่' หรือ 'risk_score') เพื่อเรียงลำดับได้")
         st.dataframe(
             tbl.style.background_gradient(subset=["risk_score"], cmap="RdYlGn_r"),
             use_container_width=True,
+            hide_index=True,
         )
 
         # Download
@@ -738,17 +794,20 @@ with tab_insurance:
             "risk_score", "priority_level",
             "recommended_campaign", "insurance_recommendation",
         ]
-        ins_tbl = area[[c for c in ins_cols if c in area.columns]].copy()
+        ins_tbl = area[[c for c in ins_cols if c in area.columns]].reset_index()
         ins_tbl["priority_level"] = ins_tbl["priority_level"].astype(str)
+        ins_tbl = ins_tbl.sort_values(COL_AREA, key=lambda s: s.map(natural_sort_key))
 
         def _color_pri(val):
             return f"background-color:{PRI_COLOR.get(val,'#555')};color:white;border-radius:4px"
 
+        st.caption("💡 คลิกหัวตารางเพื่อเรียงลำดับได้")
         st.dataframe(
             ins_tbl.style
             .map(_color_pri, subset=["priority_level"])
             .background_gradient(subset=["risk_score"], cmap="RdYlGn_r"),
             use_container_width=True,
+            hide_index=True,
         )
 
     if use_pii and "joined_pii" in res.get("saved_files", {}):

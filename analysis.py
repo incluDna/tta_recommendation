@@ -20,12 +20,15 @@ from config import (
     COL_DRIVER_EXP,
     COL_EMP_ID,
     COL_LEAVE,
+    COL_MONTH,
     COL_RIDER_EXP,
     COL_SEVERITY,
     COL_SPEED,
     COL_TIME,
     DROP_COLS,
     FUZZY_THRESHOLD,
+    MONTH_ABBR_ORDER,
+    MONTH_ORDER,
     NORMALIZE_DICT,
     OUT_AREA_FILE,
     OUT_JOINED_FILE,
@@ -84,7 +87,7 @@ def load_raw(folder: str, filename: str, sheet) -> pd.DataFrame:
 # ═══════════════════════════════════════════════════════════════════
 
 _REQUIRED_COLS = [COL_AREA, COL_CAUSE, COL_SEVERITY]
-_OPTIONAL_COLS = [COL_AGE, COL_SPEED, COL_LEAVE, COL_TIME, COL_RIDER_EXP, COL_DRIVER_EXP]
+_OPTIONAL_COLS = [COL_AGE, COL_SPEED, COL_LEAVE, COL_TIME, COL_MONTH, COL_RIDER_EXP, COL_DRIVER_EXP]
 _FUZZY_COL_THRESHOLD = 80
 
 
@@ -92,6 +95,49 @@ def _col_key(text: str) -> str:
     """ลบ whitespace ทั้งหมด → เปรียบเทียบแบบ whitespace-agnostic"""
     return re.sub(r"\s+", "", str(text))
 
+def natural_sort_key(text) -> tuple:
+    """
+    Key สำหรับเรียงชื่อพื้นที่แบบ 'ธรรมชาติ' — ตัวเลขในชื่อถูกเรียงตามค่าจริง
+    ไม่ใช่ตัวอักษร เช่น 'เขต 2' ต้องมาก่อน 'เขต 10' (string sort ปกติจะเรียง
+    'เขต 10' มาก่อน 'เขต 2' เพราะเทียบทีละตัวอักษร '1' < '2')
+    ใช้แบบ: sorted(area_list, key=natural_sort_key)
+    หรือ:   df.sort_values(COL_AREA, key=lambda s: s.map(natural_sort_key))
+    """
+    text = str(text)
+    parts = re.split(r"(\d+)", text)
+    return tuple(int(p) if p.isdigit() else p for p in parts)
+
+
+def _normalize_month_name(text) -> str:
+    """Normalize ชื่อเดือน: ตัด whitespace, ทำให้ตัวแรกใหญ่ (Title case)
+    รองรับทั้ง 'january', 'JAN', 'Jan', 'January' → คืนรูปแบบเดียวกัน"""
+    if pd.isna(text):
+        return text
+    return str(text).strip().title()
+
+
+def month_sort_key(month_name) -> int:
+    """
+    Key สำหรับเรียงเดือนตามปฏิทิน (Jan → Dec) แทน string sort (April มาก่อน January)
+    รองรับทั้งชื่อเต็ม (January) และตัวย่อ (Jan) ไม่ตรง format ก็ไม่ error — เดือนที่ไม่รู้จักไปอยู่ท้ายสุด
+    """
+    name = _normalize_month_name(month_name)
+    if name in MONTH_ORDER:
+        return MONTH_ORDER.index(name)
+    if name in MONTH_ABBR_ORDER:
+        return MONTH_ABBR_ORDER.index(name)
+    # เผื่อเขียนแบบ 3 ตัวอักษรแต่ case ไม่ตรง (เช่น 'jan')
+    name3 = name[:3]
+    if name3 in MONTH_ABBR_ORDER:
+        return MONTH_ABBR_ORDER.index(name3)
+    return 999   # ไม่รู้จัก → ไปท้ายสุด ไม่ error
+
+
+def get_month_order(month_series: pd.Series) -> list[str]:
+    """คืน list ชื่อเดือนที่มีอยู่จริงใน series นั้น เรียงตามปฏิทินแล้ว
+    ใช้ใส่ category_orders ของ plotly หรือ pd.Categorical"""
+    unique_months = month_series.dropna().unique().tolist()
+    return sorted(unique_months, key=month_sort_key)
 
 def resolve_columns(df: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
     """
@@ -194,6 +240,10 @@ def clean(df: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
         if col in df.columns:
             df[col] = pd.to_numeric(df[col], errors="coerce")
 
+    # 2.4 Normalize เดือน (january / JAN / January → รูปแบบเดียวกัน)
+    if COL_MONTH in df.columns:
+        df[COL_MONTH] = df[COL_MONTH].apply(_normalize_month_name)
+    
     return df, col_report
 
 
