@@ -3,6 +3,8 @@
 
 https://tta-recommendation.streamlit.app/
 
+### [คู่มือการใช้งาน](assets\tta_handbook.pdf)
+
 ### Upload file
 - upload file ใน `/data` และ เลือก sheet ที่มี data อยู่ (กรณี run localhost)
   <br>or
