@@ -1,9 +1,11 @@
 # TTA Recommendation🛵🗺️
 > ระบบในการประเมินความเสี่ยงของพื้นที่ต่าง ๆ ในรูปแบบของ risk score เพื่อทำ Campaign & Insurance recommendation (แสดงผ่าน streamlit dashboard)
 
-https://tta-recommendation.streamlit.app/
+Campaign recommendation: https://tta-recommendation.streamlit.app/
 
-### [คู่มือการใช้งาน](https://github.com/incluDna/tta_recommendation/blob/7995db961d02b4aaded3e841acb42202d6a694a3/assets/tta_handbook.pdf)
+Prediction: https://includna.github.io/tta_recommendation/
+
+### [คู่มือการใช้งาน](https://github.com/incluDna/tta_recommendation/assets/final_tta_recommend.pdf)
 
 ### Upload file
 - upload file ใน `/data` และ เลือก sheet ที่มี data อยู่ (กรณี run localhost)
@@ -29,6 +31,7 @@ streamlit run app.py
 
 - **Insight**: Overall Theme (pie-chart), Rider Experience Insight, Campaign Theme Insight
 - **Campaign**: Recommended (อิงจากความถี่และความรุนแรง), Dominant Theme (อิงจากความถี่), Supporting theme, Risk Score, Confidence แต่ละพื้นที่
+- **Predict**: Predict Q3-4/2569 (https://includna.github.io/tta_recommendation/)
 - **Insurance**: Insurance Recommendation ต่อพื้นที่
 
 ---
