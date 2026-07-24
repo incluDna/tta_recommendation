@@ -1,0 +1,616 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🛵 Executive Safety & Risk Predictive Dashboard</title>
+    <!-- Tailwind CSS & Libraries -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Kanit', sans-serif; background-color: #f8fafc; color: #1e293b; }
+        
+        /* Slide Card Layout for Tab 1 */
+        .layout-slide {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 16px;
+            align-items: stretch;
+        }
+        @media (min-width: 1024px) {
+            .layout-slide {
+                grid-template-columns: 1fr 1fr 0.9fr;
+                max-width: 1280px;
+                margin: 0 auto;
+            }
+        }
+        .box-card-slide {
+            background: #ffffff;
+            border: 2px solid #222222;
+            border-radius: 18px;
+            padding: 18px 20px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.03);
+        }
+        .title-orange { color: #d97706; font-weight: 700; }
+        .wf-box {
+            font-size: 0.7rem;
+            font-weight: 700;
+            letter-spacing: 0.3px;
+            color: #111827;
+            text-align: center;
+            padding: 6px 10px;
+            background: #f8fafc;
+            border-radius: 8px;
+            width: 100%;
+        }
+        .wf-arrow { color: #6b7280; font-size: 0.75rem; margin: 0; line-height: 1; }
+        .wf-box-lg {
+            font-size: 0.95rem;
+            font-weight: 700;
+            letter-spacing: 0.3px;
+            color: #111827;
+            text-align: center;
+            padding: 10px 14px;
+            width: 100%;
+        }
+        .wf-arrow-lg { color: #6b7280; font-size: 1.1rem; margin: 0; line-height: 1; }
+    </style>
+</head>
+<body class="p-3 md:p-5">
+
+    <div class="max-w-[1600px] mx-auto space-y-4">
+
+        <!-- Top Navigation Bar -->
+        <header class="bg-white p-3 md:p-4 rounded-2xl shadow-sm border border-slate-200 flex flex-col md:flex-row justify-between items-center gap-3">
+            <div class="flex items-center gap-3">
+                <span class="text-2xl">🛵</span>
+                <div>
+                    <h1 class="text-xl font-bold text-slate-900 leading-tight">Safety Risk & Campaign Predictive Analytics</h1>
+                    <p class="text-xs text-slate-500">ระบบพยากรณ์ความเสี่ยงอุบัติเหตุและจัดทำแผนป้องกันรายพื้นที่</p>
+                </div>
+            </div>
+
+            <!-- Tab Buttons -->
+            <nav class="flex bg-slate-100 p-1 rounded-xl gap-1 w-full md:w-auto overflow-x-auto">
+                <button id="btn-tab-0" onclick="switchTab(0)" class="tab-btn px-4 py-2 text-xs font-semibold rounded-lg transition text-indigo-700 bg-white shadow-sm">Tab 1: Executive Summary</button>
+                <button id="btn-tab-1" onclick="switchTab(1)" class="tab-btn px-4 py-2 text-xs font-semibold rounded-lg transition text-slate-600 hover:text-indigo-600">Tab 2: Overall Theme Forecast</button>
+                <button id="btn-tab-2" onclick="switchTab(2)" class="tab-btn px-4 py-2 text-xs font-semibold rounded-lg transition text-slate-600 hover:text-indigo-600">Tab 3: Sub Cause Analysis</button>
+            </nav>
+        </header>
+
+        <!-- ================= TAB 1: PROBLEM, WORKFLOW & MODEL FEATURES ================= -->
+        <div id="tab-0" class="tab-content block">
+            <div class="max-w-7xl mx-auto space-y-8 py-2">
+
+                <!-- Problem Statement -->
+                <div class="bg-white rounded-3xl border-2 border-slate-900 shadow-sm p-8">
+                    <p class="text-xl md:text-2xl leading-relaxed text-slate-800">
+                        <span class="font-bold text-xl md:text-2xl">Problem</span>:
+                        ต้องการทำนายว่าใน Q3-Q4 ของปี 2569 มีแนวโน้มจะเกิดอุบัติเหตุอะไรบ้าง
+                        ปัจจัยที่อาจจะเกิด เพื่อหาแนวทางป้องกัน
+                    </p>
+                    <p class="text-xl md:text-2xl leading-relaxed text-slate-800 mt-4">
+                        จึงได้ทำ <strong class="text-slate-900">model</strong> ที่วิเคราะห์ข้อมูลจากปี 2568
+                        และจาก Q1-2 ของปี 2569 โดยดูจากเหตุการณ์ที่เกิดขึ้น
+                        และหา <span class="italic">probability</span> ที่จะเกิด
+                    </p>
+                </div>
+
+                <!-- Workflow / Model Features / Feature Importance -->
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+                    <!-- Workflow -->
+                    <div class="bg-white rounded-3xl border-2 border-slate-900 shadow-sm p-8 flex flex-col">
+                        <h2 class="font-bold text-2xl mb-6">workflow</h2>
+                        <div class="flex flex-col items-center w-full gap-2 flex-1 justify-center">
+                            <div class="wf-box-lg">HISTORICAL ACCIDENT DATA</div>
+                            <div class="wf-arrow-lg">↓</div>
+                            <div class="wf-box-lg">DATA ANALYSIS</div>
+                            <div class="wf-arrow-lg">↓</div>
+                            <div class="wf-box-lg">IDENTIFY RISK FACTORS</div>
+                            <div class="wf-arrow-lg">↓</div>
+                            <div class="wf-box-lg">MACHINE LEARNING MODEL</div>
+                            <div class="wf-arrow-lg">↓</div>
+                            <div class="wf-box-lg">Q3-Q4 ACCIDENT RISK PREDICTION</div>
+                            <div class="wf-arrow-lg">↓</div>
+                            <div class="wf-box-lg">PREVENTION RECOMMENDATION</div>
+                        </div>
+                    </div>
+
+                    <!-- Model Features -->
+                    <div class="bg-white rounded-3xl border-2 border-slate-900 shadow-sm p-8">
+                        <h2 class="text-2xl font-bold text-slate-900 mb-6">model_features</h2>
+                        <ul class="list-disc pl-6 space-y-3 text-lg md:text-xl text-slate-800">
+                            <li>'quarter'</li>
+                            <li>'พื้นที่'</li>
+                            <li>'ทัศนวิสัย',</li>
+                            <li>'สภาพผิวจราจร', '</li>
+                            <li>ลักษณะเส้นทาง',</li>
+                            <li>'สภาพการจราจร',</li>
+                            <li>'4M1E'</li>
+                        </ul>
+                        <br/>
+                        <h2 class="text-orange-700 text-2xl font-bold mb-6">เพิ่มเติม</h2>
+                        <p class="text-lg text-slate-700">
+                            Q4 1-BW ควรเน้นด้าน focus & attention
+                        </p>
+                    </div>
+
+                    <!-- Feature Importance -->
+                    <div class="bg-white rounded-3xl border-2 border-slate-900 shadow-sm p-8 flex flex-col">
+                        <h2 class="text-2xl font-bold text-slate-900 mb-6">Feature Importance (%)</h2>
+                        <ul class="list-disc pl-6 space-y-3 text-lg md:text-xl text-slate-800 mb-6">
+                            <li>พื้นที่ 27.91</li>
+                            <li>quarter 15.47</li>
+                            <li>ลักษณะเส้นทาง 13.09</li>
+                            <li>สภาพผิวจราจร 12.92</li>
+                        </ul>
+                        <div class="flex-1 min-h-[240px]">
+                            <div id="chartFeatureImportance" class="w-full h-full"></div>
+                        </div>
+                    </div>
+
+                </div>
+
+            </div>
+        </div>
+
+
+        <!-- ================= TAB 2: OVERALL THEME FORECAST ================= -->
+        <div id="tab-1" class="tab-content hidden space-y-4">
+            
+            <!-- Controls Bar -->
+            <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                <div>
+                    <h2 class="text-lg font-bold text-slate-900 flex items-center gap-2">
+                        <span>🛵 Executive Risk Dashboard</span>
+                        <span class="text-xs bg-indigo-100 text-indigo-700 px-2.5 py-0.5 rounded-full font-semibold">Theme-Level Precision</span>
+                    </h2>
+                    <p class="text-xs text-slate-500">ประมวลผลตรงจากไฟล์พยากรณ์ระดับ Theme และปัจจัย 4M1E รายเขตพื้นที่</p>
+                </div>
+                
+                <div class="flex flex-wrap gap-3 w-full md:w-auto items-end">
+                    <div>
+                        <label class="block text-xs font-semibold text-indigo-600 mb-1">📂 เลือกไฟล์ CSV (ระดับ Theme)</label>
+                        <input type="file" id="csvFileInput" accept=".csv" onchange="loadThemeCSV(event)" class="text-xs text-slate-500 file:mr-2 file:py-1 file:px-2.5 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100 cursor-pointer border border-slate-200 rounded-xl p-1 bg-slate-50"/>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-slate-500 mb-1">ไตรมาส</label>
+                        <select id="selQuarter" onchange="processAndRenderTheme()" class="bg-slate-50 border border-slate-300 text-slate-800 text-xs font-semibold rounded-xl p-2 focus:ring-2 focus:ring-indigo-500">
+                            <option value="Q3">Q3</option>
+                            <option value="Q4">Q4</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-slate-500 mb-1">เขตพื้นที่</label>
+                        <select id="selArea" onchange="processAndRenderTheme()" class="bg-slate-50 border border-slate-300 text-slate-800 text-xs font-semibold rounded-xl p-2 focus:ring-2 focus:ring-indigo-500">
+                            <option value="ทั้งหมด">ทั้งหมด (13 เขต)</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <!-- KPI Cards -->
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm border-l-4 border-l-blue-500">
+                    <p class="text-xs text-slate-500 font-semibold uppercase">Top Theme เสี่ยงสูงสุด</p>
+                    <p id="kpiTopTheme" class="text-base font-bold text-slate-900 mt-1">-</p>
+                </div>
+                <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm border-l-4 border-l-rose-500">
+                    <p class="text-xs text-slate-500 font-semibold uppercase">ความเสี่ยงสูงสุด (Top Prob)</p>
+                    <p id="kpiTopProb" class="text-2xl font-black text-rose-600 mt-1">0%</p>
+                </div>
+                <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm border-l-4 border-l-amber-500">
+                    <p class="text-xs text-slate-500 font-semibold uppercase">ปัจจัยหลัก (4M1E)</p>
+                    <p id="kpi4M1E" class="text-base font-bold text-slate-900 mt-1">-</p>
+                </div>
+                <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm border-l-4 border-l-emerald-500">
+                    <p class="text-xs text-slate-500 font-semibold uppercase">จำนวนเขตพื้นที่</p>
+                    <p id="kpiAreaCount" class="text-2xl font-bold text-emerald-600 mt-1">0 เขต</p>
+                </div>
+            </div>
+
+            <!-- Plotly Visual Charts -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+                    <h3 class="text-xs font-bold text-slate-800 mb-2">📊 โอกาสเกิดอุบัติเหตุเฉลี่ยแยกตาม 4 Theme หลัก (%)</h3>
+                    <div id="chartThemes" class="h-60"></div>
+                </div>
+                <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+                    <h3 class="text-xs font-bold text-slate-800 mb-2">🧩 การกระจายตัวของปัจจัยวิเคราะห์ (4M1E Breakdown)</h3>
+                    <div id="chart4M1E" class="h-60"></div>
+                </div>
+            </div>
+
+            <!-- Table -->
+            <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+                <h3 class="text-xs font-bold text-slate-900 mb-3">📋 ตารางสรุปพยากรณ์ความเสี่ยงระดับ Theme รายเขตพื้นที่ (13 Areas)</h3>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left text-xs">
+                        <thead class="bg-slate-50 text-slate-600 uppercase font-bold border-b border-slate-200">
+                            <tr>
+                                <th class="p-2.5">เขตพื้นที่</th>
+                                <th class="p-2.5">Predicted Top Theme</th>
+                                <th class="p-2.5 text-center">Top Theme Prob (%)</th>
+                                <th class="p-2.5 text-center">Defensive (%)</th>
+                                <th class="p-2.5 text-center">Focus (%)</th>
+                                <th class="p-2.5 text-center">Road & Vehicle (%)</th>
+                                <th class="p-2.5 text-center">Speed (%)</th>
+                                <th class="p-2.5 text-center">4M1E</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tblBodyTheme" class="divide-y divide-slate-100 text-slate-700 font-medium">
+                            <tr><td colspan="8" class="p-6 text-center text-slate-400">👈 กรุณาเลือกไฟล์ CSV ผลลัพธ์ระดับ Theme ที่มุมขวาบน</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- ================= TAB 3: SUB CAUSE ANALYSIS ================= -->
+        <div id="tab-2" class="tab-content hidden space-y-4">
+
+            <!-- Controls Bar -->
+            <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                <div>
+                    <h2 class="text-lg font-bold text-slate-900 flex items-center gap-2">
+                        <span>🔍 Sub Cause Breakdown Analysis</span>
+                        <span class="text-xs bg-purple-100 text-purple-700 px-2.5 py-0.5 rounded-full font-semibold">Granular Root Cause</span>
+                    </h2>
+                    <p class="text-xs text-slate-500">ประมวลผลรายละเอียดสาเหตุย่อย (Sub Cause) พร้อมแนวโน้ม YoY เพื่อลงลึกระดับปฏิบัติการ</p>
+                </div>
+
+                <div class="flex flex-wrap gap-3 w-full md:w-auto items-end">
+                    <div>
+                        <label class="block text-xs font-semibold text-purple-600 mb-1">📂 เลือกไฟล์ CSV (Sub Cause)</label>
+                        <input type="file" id="csvSubCauseInput" accept=".csv" onchange="loadSubCauseCSV(event)" class="text-xs text-slate-500 file:mr-2 file:py-1 file:px-2.5 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-purple-50 file:text-purple-700 hover:file:bg-purple-100 cursor-pointer border border-slate-200 rounded-xl p-1 bg-slate-50"/>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-slate-500 mb-1">ไตรมาส</label>
+                        <select id="selSubQuarter" onchange="processAndRenderSubCause()" class="bg-slate-50 border border-slate-300 text-slate-800 text-xs font-semibold rounded-xl p-2 focus:ring-2 focus:ring-purple-500">
+                            <option value="Q3">Q3</option>
+                            <option value="Q4">Q4</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-slate-500 mb-1">เขตพื้นที่</label>
+                        <select id="selSubArea" onchange="processAndRenderSubCause()" class="bg-slate-50 border border-slate-300 text-slate-800 text-xs font-semibold rounded-xl p-2 focus:ring-2 focus:ring-purple-500">
+                            <option value="ทั้งหมด">ทั้งหมด (13 เขต)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-slate-500 mb-1">เลือก Theme หลัก</label>
+                        <select id="selSubTheme" onchange="processAndRenderSubCause()" class="bg-slate-50 border border-slate-300 text-slate-800 text-xs font-semibold rounded-xl p-2 focus:ring-2 focus:ring-purple-500">
+                            <option value="ทั้งหมด">ทั้งหมดทุก Theme</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Sub Cause KPI Cards -->
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm border-l-4 border-l-purple-500">
+                    <p class="text-xs text-slate-500 font-semibold uppercase">Sub Cause เสี่ยงสูงสุด</p>
+                    <p id="kpiTopSubCause" class="text-base font-bold text-slate-900 mt-1">-</p>
+                </div>
+                <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm border-l-4 border-l-indigo-500">
+                    <p class="text-xs text-slate-500 font-semibold uppercase">โอกาสเกิดเหตุเฉลี่ย</p>
+                    <p id="kpiSubMaxPct" class="text-2xl font-black text-pink-600 mt-1">0%</p>
+                </div>
+                <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm border-l-4 border-l-rose-500">
+                    <p class="text-xs text-slate-500 font-semibold uppercase">เขตเสี่ยงพุ่ง (YoY > 1.1x)</p>
+                    <p id="kpiSubHighTrend" class="text-lg font-bold text-slate-900 mt-1">-</p>
+                </div>
+                <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm border-l-4 border-l-emerald-500">
+                    <p class="text-xs text-slate-500 font-semibold uppercase">จำนวนรายการสาเหตุย่อย</p>
+                    <p id="kpiSubCount" class="text-2xl font-black text-emerald-600 mt-1">0 รายการ</p>
+                </div>
+            </div>
+
+            <!-- Sub Cause Chart & Summary -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+                    <h3 class="text-xs font-bold text-slate-800 mb-2">🔝 Top 5 สาเหตุย่อยเสี่ยงสูงสุด (%)</h3>
+                    <div id="chartSubCause" class="h-64"></div>
+                </div>
+                <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-between">
+                    <h3 class="text-xs font-bold text-slate-800 mb-2">💡 ข้อเสนอแนะการแก้ไขเชิงลึก (Actionable Recommendations)</h3>
+                    <div id="subRecommendations" class="space-y-2 text-xs text-slate-600 flex-1 overflow-y-auto pr-1">
+                        <p class="text-slate-400 italic">เลือก/อัปโหลดไฟล์ Sub Cause เพื่อดูข้อเสนอแนะรายสาเหตุ...</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Sub Cause Table -->
+            <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+                <h3 class="text-xs font-bold text-slate-900 mb-3">📋 ตารางแสดงรายละเอียด Sub Cause Breakdown (เรียงตามความเสี่ยงสูง-ต่ำ)</h3>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left text-xs">
+                        <thead class="bg-slate-50 text-slate-600 uppercase font-bold border-b border-slate-200">
+                            <tr>
+                                <th class="p-2.5">เขตพื้นที่</th>
+                                <th class="p-2.5">Main Risk Theme</th>
+                                <th class="p-2.5">Sub Cause (สาเหตุย่อย)</th>
+                                <th class="p-2.5 text-center">โอกาสเกิดเหตุ (%)</th>
+                                <th class="p-2.5 text-center">แนวโน้ม YoY</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tblBodySub" class="divide-y divide-slate-100 text-slate-700 font-medium">
+                            <tr><td colspan="5" class="p-6 text-center text-slate-400">👈 กรุณาเลือกไฟล์ CSV สำหรับ Sub Cause Analysis ที่มุมขวาบน</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+        </div>
+
+    </div>
+
+    <!-- Scripts Logic -->
+    <script>
+        // Tab Navigation
+        function switchTab(index) {
+            document.querySelectorAll('.tab-content').forEach((el, i) => {
+                if (i === index) {
+                    el.classList.remove('hidden');
+                    el.classList.add('block');
+                } else {
+                    el.classList.add('hidden');
+                    el.classList.remove('block');
+                }
+            });
+
+            document.querySelectorAll('.tab-btn').forEach((btn, i) => {
+                if (i === index) {
+                    btn.className = "tab-btn px-4 py-2 text-xs font-semibold rounded-lg transition text-indigo-700 bg-white shadow-sm";
+                } else {
+                    btn.className = "tab-btn px-4 py-2 text-xs font-semibold rounded-lg transition text-slate-600 hover:text-indigo-600";
+                }
+            });
+
+        }
+
+        // Render Feature Importance Chart (Tab 1) - static values, rendered immediately on load
+        function renderFeatureImportanceChart() {
+            Plotly.newPlot('chartFeatureImportance', [{
+                x: ['พื้นที่', 'quarter', 'ลักษณะเส้นทาง', 'สภาพผิวจราจร'],
+                y: [27.91, 15.47, 13.09, 12.92],
+                type: 'bar',
+                marker: { color: ['#10b981', '#fbbf24', '#38bdf8', '#a67c52'] }
+            }], {
+                margin: { t: 10, b: 40, l: 30, r: 10 },
+                yaxis: { range: [0, 30] }
+            }, { responsive: true, displayModeBar: false });
+        }
+        renderFeatureImportanceChart();
+
+        // ================= TAB 2 DATA PROCESS (Overall Theme Forecast) =================
+        let rawThemeData = [];
+
+        function loadThemeCSV(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            Papa.parse(file, {
+                header: true,
+                dynamicTyping: true,
+                skipEmptyLines: true,
+                complete: function(results) {
+                    rawThemeData = results.data.filter(r => r["quarter"] || r["Quarter"]);
+                    populateAreaDropdown();
+                    processAndRenderTheme();
+                }
+            });
+        }
+
+        function populateAreaDropdown() {
+            const areas = [...new Set(rawThemeData.map(r => r["พื้นที่"]))].filter(Boolean).sort();
+            const select = document.getElementById("selArea");
+            select.innerHTML = '<option value="ทั้งหมด">ทั้งหมด (13 เขต)</option>';
+            areas.forEach(a => {
+                select.innerHTML += `<option value="${a}">${a}</option>`;
+            });
+        }
+
+        function processAndRenderTheme() {
+            if(!rawThemeData.length) return;
+
+            const q = document.getElementById("selQuarter").value;
+            const a = document.getElementById("selArea").value;
+
+            let filtered = rawThemeData.filter(r => (r["quarter"] || r["Quarter"]) === q);
+            if (a !== "ทั้งหมด") {
+                filtered = filtered.filter(r => r["พื้นที่"] === a);
+            }
+
+            const avgDefensive = filtered.reduce((sum, r) => sum + (r["Prob_Defensive Driving (%)"] || 0), 0) / (filtered.length || 1);
+            const avgFocus = filtered.reduce((sum, r) => sum + (r["Prob_Focus & Attention (%)"] || 0), 0) / (filtered.length || 1);
+            const avgRoad = filtered.reduce((sum, r) => sum + (r["Prob_Road & Vehicle Safety (%)"] || 0), 0) / (filtered.length || 1);
+            const avgSpeed = filtered.reduce((sum, r) => sum + (r["Prob_Speed Awareness (%)"] || 0), 0) / (filtered.length || 1);
+
+            const themeAverages = [
+                { name: "Defensive Driving", val: avgDefensive },
+                { name: "Focus & Attention", val: avgFocus },
+                { name: "Road & Vehicle Safety", val: avgRoad },
+                { name: "Speed Awareness", val: avgSpeed }
+            ].sort((x, y) => y.val - x.val);
+
+            const map4M1E = {};
+            filtered.forEach(r => {
+                const val = r["4M1E"] || "N/A";
+                map4M1E[val] = (map4M1E[val] || 0) + 1;
+            });
+            const top4M1EKey = Object.keys(map4M1E).sort((x, y) => map4M1E[y] - map4M1E[x])[0] || "-";
+            const maxProbRow = [...filtered].sort((x, y) => (y["Top_Theme_Probability (%)"] || 0) - (x["Top_Theme_Probability (%)"] || 0))[0];
+
+            document.getElementById("kpiTopTheme").innerText = themeAverages[0].name;
+            document.getElementById("kpiTopProb").innerText = (maxProbRow ? maxProbRow["Top_Theme_Probability (%)"] : 0).toFixed(1) + "%";
+            document.getElementById("kpi4M1E").innerText = top4M1EKey;
+            document.getElementById("kpiAreaCount").innerText = filtered.length + " เขต";
+
+            Plotly.newPlot('chartThemes', [{
+                x: themeAverages.map(d => d.name),
+                y: themeAverages.map(d => d.val.toFixed(1)),
+                type: 'bar',
+                text: themeAverages.map(d => d.val.toFixed(1) + '%'),
+                textposition: 'outside',
+                marker: { color: ['#3b82f6', '#8b5cf6', '#f59e0b', '#ef4444'] }
+            }], { margin: { t: 25, b: 40, l: 30, r: 20 }, yaxis: { title: "ความเสี่ยงเฉลี่ย (%)" } }, { responsive: true, displayModeBar: false });
+
+            Plotly.newPlot('chart4M1E', [{
+                labels: Object.keys(map4M1E),
+                values: Object.values(map4M1E),
+                type: 'pie',
+                hole: 0.4
+            }], { margin: { t: 15, b: 15, l: 15, r: 15 } }, { responsive: true, displayModeBar: false });
+
+            const sortedTable = [...filtered].sort((x, y) => (y["Top_Theme_Probability (%)"] || 0) - (x["Top_Theme_Probability (%)"] || 0));
+            const tbody = document.getElementById("tblBodyTheme");
+            tbody.innerHTML = sortedTable.map(r => `
+                <tr class="hover:bg-slate-50 transition">
+                    <td class="p-2.5 font-semibold text-slate-900">${r["พื้นที่"] || '-'}</td>
+                    <td class="p-2.5"><span class="bg-indigo-50 text-indigo-700 font-bold text-xs px-2 py-0.5 rounded-md border border-indigo-200">${r["Predicted_Top_Theme"] || '-'}</span></td>
+                    <td class="p-2.5 text-center font-black text-rose-600">${(r["Top_Theme_Probability (%)"] || 0).toFixed(1)}%</td>
+                    <td class="p-2.5 text-center text-slate-600">${(r["Prob_Defensive Driving (%)"] || 0).toFixed(1)}%</td>
+                    <td class="p-2.5 text-center text-slate-600">${(r["Prob_Focus & Attention (%)"] || 0).toFixed(1)}%</td>
+                    <td class="p-2.5 text-center text-slate-600">${(r["Prob_Road & Vehicle Safety (%)"] || 0).toFixed(1)}%</td>
+                    <td class="p-2.5 text-center text-slate-600">${(r["Prob_Speed Awareness (%)"] || 0).toFixed(1)}%</td>
+                    <td class="p-2.5 text-center"><span class="bg-slate-100 text-slate-700 text-xs px-2 py-0.5 rounded-full font-semibold">${r["4M1E"] || '-'}</span></td>
+                </tr>
+            `).join('');
+        }
+
+        // ================= TAB 3 DATA PROCESS (Sub Cause Analysis) =================
+        // Expected CSV columns: Quarter, พื้นที่, Predicted_Theme, Sub_Cause (สาเหตุย่อย),
+        //                        Estimated_Cause_Probability (%), Q1-Q2_Trend_Multiplier
+        let rawSubData = [];
+
+        function loadSubCauseCSV(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            Papa.parse(file, {
+                header: true,
+                dynamicTyping: true,
+                skipEmptyLines: true,
+                complete: function(results) {
+                    rawSubData = results.data.filter(r => r["Quarter"]);
+                    populateSubAreaDropdown();
+                    populateSubThemeDropdown();
+                    processAndRenderSubCause();
+                }
+            });
+        }
+
+        function populateSubAreaDropdown() {
+            const areas = [...new Set(rawSubData.map(r => r["พื้นที่"]))].filter(Boolean).sort();
+            const select = document.getElementById("selSubArea");
+            select.innerHTML = '<option value="ทั้งหมด">ทั้งหมด (13 เขต)</option>';
+            areas.forEach(a => {
+                select.innerHTML += `<option value="${a}">${a}</option>`;
+            });
+        }
+
+        function populateSubThemeDropdown() {
+            const themes = [...new Set(rawSubData.map(r => r["Predicted_Theme"]))].filter(Boolean).sort();
+            const select = document.getElementById("selSubTheme");
+            select.innerHTML = '<option value="ทั้งหมด">ทั้งหมดทุก Theme</option>';
+            themes.forEach(t => {
+                select.innerHTML += `<option value="${t}">${t}</option>`;
+            });
+        }
+
+        function trendBadge(mult) {
+            mult = mult || 1.0;
+            if (mult > 1.1) return `<span class="bg-rose-50 text-rose-700 border border-rose-200 font-bold text-xs px-2 py-0.5 rounded-full">🔴 +${((mult - 1) * 100).toFixed(0)}% (พุ่งสูง)</span>`;
+            if (mult < 0.9) return `<span class="bg-emerald-50 text-emerald-700 border border-emerald-200 font-bold text-xs px-2 py-0.5 rounded-full">🟢 -${((1 - mult) * 100).toFixed(0)}% (ลดลง)</span>`;
+            return `<span class="bg-slate-100 text-slate-600 text-xs px-2 py-0.5 rounded-full">⚪ ปกติ</span>`;
+        }
+
+        function subCauseRecommendation(cause) {
+            // Fallback recommendation text keyed on keywords in the sub cause name
+            const c = (cause || "").toLowerCase();
+            if (c.includes("เร็ว") || c.includes("speed")) return "ติดตั้งจุดตรวจวัดความเร็วและสัญญาณเตือนล่วงหน้าในพื้นที่เสี่ยง";
+            if (c.includes("มือถือ") || c.includes("focus") || c.includes("สมาธิ")) return "รณรงค์ห้ามใช้โทรศัพท์ขณะขับขี่และจัดอบรมเรื่องสมาธิในการขับขี่";
+            if (c.includes("หมวก") || c.includes("เข็มขัด") || c.includes("defensive")) return "เข้มงวดการสวมอุปกรณ์นิรภัยและอบรม Defensive Driving";
+            if (c.includes("ถนน") || c.includes("road") || c.includes("ยาง") || c.includes("รถ")) return "ตรวจสอบสภาพถนนและบำรุงรักษายานพาหนะเป็นระยะ";
+            return "เน้นการอบรมและสร้างความตระหนักรู้เฉพาะจุดสำหรับสาเหตุนี้";
+        }
+
+        function processAndRenderSubCause() {
+            if (!rawSubData.length) return;
+
+            const q = document.getElementById("selSubQuarter").value;
+            const a = document.getElementById("selSubArea").value;
+            const t = document.getElementById("selSubTheme").value;
+
+            let filtered = rawSubData.filter(r => r["Quarter"] === q);
+            if (a !== "ทั้งหมด") {
+                filtered = filtered.filter(r => r["พื้นที่"] === a);
+            }
+            if (t !== "ทั้งหมด") {
+                filtered = filtered.filter(r => r["Predicted_Theme"] === t);
+            }
+
+            const avgProb = filtered.reduce((sum, r) => sum + (r["Estimated_Cause_Probability (%)"] || 0), 0) / (filtered.length || 1);
+            const highTrendCount = new Set(filtered.filter(r => r["Q1-Q2_Trend_Multiplier"] > 1.1).map(r => r["พื้นที่"])).size;
+
+            // Group by Sub Cause, average probability, keep max trend multiplier seen for that cause
+            const causeMap = {};
+            filtered.forEach(r => {
+                const c = r["Sub_Cause (สาเหตุย่อย)"] || "อื่นๆ";
+                if (!causeMap[c]) causeMap[c] = { sum: 0, count: 0 };
+                causeMap[c].sum += r["Estimated_Cause_Probability (%)"] || 0;
+                causeMap[c].count++;
+            });
+            const causeArr = Object.keys(causeMap).map(k => ({
+                cause: k,
+                avg: causeMap[k].sum / causeMap[k].count
+            })).sort((x, y) => y.avg - x.avg);
+            const top5Causes = causeArr.slice(0, 5);
+
+            // Update KPI cards
+            document.getElementById("kpiTopSubCause").innerText = causeArr[0] ? causeArr[0].cause : "-";
+            document.getElementById("kpiSubMaxPct").innerText = avgProb.toFixed(1) + "%";
+            document.getElementById("kpiSubHighTrend").innerText = highTrendCount + " เขต";
+            document.getElementById("kpiSubCount").innerText = filtered.length + " รายการ";
+
+            // Chart: Top 5 sub causes (horizontal bar, mirrors dashboard #2's chartCauses)
+            Plotly.newPlot('chartSubCause', [{
+                x: top5Causes.map(d => d.avg.toFixed(1)),
+                y: top5Causes.map(d => d.cause),
+                type: 'bar',
+                orientation: 'h',
+                text: top5Causes.map(d => d.avg.toFixed(1) + '%'),
+                textposition: 'outside',
+                marker: { color: '#8b5cf6' }
+            }], { margin: { t: 15, b: 20, l: 150, r: 40 }, xaxis: { range: [0, 100] }, yaxis: { autorange: 'reversed' } }, { responsive: true, displayModeBar: false });
+
+            // Recommendations panel
+            const recBox = document.getElementById("subRecommendations");
+            recBox.innerHTML = causeArr.map(d => `
+                <div class="p-2 bg-slate-50 border-l-2 border-purple-500 rounded-r-lg">
+                    <p class="font-bold text-slate-800">${d.cause} <span class="text-pink-600 font-black">(${d.avg.toFixed(1)}%)</span></p>
+                    <p class="text-slate-600 mt-0.5">${subCauseRecommendation(d.cause)}</p>
+                </div>
+            `).join('');
+
+            // Table: sorted by risk probability, high to low, with trend badge
+            const sortedTable = [...filtered].sort((x, y) => (y["Estimated_Cause_Probability (%)"] || 0) - (x["Estimated_Cause_Probability (%)"] || 0));
+            const tbody = document.getElementById("tblBodySub");
+            tbody.innerHTML = sortedTable.map(r => `
+                <tr class="hover:bg-slate-50 transition">
+                    <td class="p-2.5 font-semibold text-slate-900">${r["พื้นที่"] || '-'}</td>
+                    <td class="p-2.5"><span class="bg-slate-100 text-slate-700 text-xs px-2 py-0.5 rounded-md border">${r["Predicted_Theme"] || '-'}</span></td>
+                    <td class="p-2.5 font-bold text-purple-700">${r["Sub_Cause (สาเหตุย่อย)"] || '-'}</td>
+                    <td class="p-2.5 text-center font-black text-rose-600">${(r["Estimated_Cause_Probability (%)"] || 0).toFixed(1)}%</td>
+                    <td class="p-2.5 text-center">${trendBadge(r["Q1-Q2_Trend_Multiplier"])}</td>
+                </tr>
+            `).join('');
+        }
+    </script>
+</body>
+</html>

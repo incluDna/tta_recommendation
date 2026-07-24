@@ -40,6 +40,18 @@ from config import (
     RIDER_INSURANCE_MAP,
     RISK_WEIGHTS,
     THEMES,
+    MONTH_TO_QUARTER,
+    COLUMN_RENAME,
+    COL_VEHICLE,
+    COL_PERIOD,
+    COL_VISIBILITY,
+    COL_ROAD_SURFACE,
+    COL_ROAD_TYPE,
+    COL_TRAFFIC,
+    COL_SPEED_GROUP,
+    COL_4M1E,
+    COL_YEAR,
+    COL_QUARTER,
 )
 
 try:
@@ -217,6 +229,8 @@ def clean(df: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
     """
     df = df.copy()
 
+    df = df.rename(columns=COLUMN_RENAME)
+
     # 2.0 resolve (normalize + fuzzy + error)
     df, col_report = resolve_columns(df)
 
@@ -285,11 +299,14 @@ def feature_engineer(df: pd.DataFrame) -> pd.DataFrame:
     # Experience → months
     if COL_RIDER_EXP in df.columns:
         df["rider_exp_month"] = df[COL_RIDER_EXP].apply(_exp_to_months)
-        df["rider_exp_group"] = pd.cut(
+        df["rider_exp_group"] = (
+            pd.cut(
             df["rider_exp_month"],
             bins=[-1, 3, 12, 24, 999],
             labels=["<3m", "3-12m", "1-2y", ">2y"],
         )
+        .astype(str)
+    )
 
     if COL_DRIVER_EXP in df.columns:
         df["driver_exp_month"] = df[COL_DRIVER_EXP].apply(_exp_to_months)
@@ -307,6 +324,25 @@ def feature_engineer(df: pd.DataFrame) -> pd.DataFrame:
         df["hour"]   = df[COL_TIME].apply(_extract_hour)
         df["period"] = df["hour"].apply(_get_period)
 
+    date_col = "วันที่เกิดอุบัติเหตุ(พ.ศ. เท่านั้น)"
+
+    # year
+    if date_col in df.columns:
+
+        year = (
+            df[date_col]
+            .astype(str)
+            .str[:4]
+            .str[:4]                  # เอา 4 ตัวแรก
+            .pipe(pd.to_numeric, errors="coerce")
+            .astype("Int64")
+        )
+
+        df["year"] = year
+    #quarter
+    if COL_MONTH in df.columns:
+        df["quarter"] = df[COL_MONTH].map(MONTH_TO_QUARTER)
+    
     return df
 
 
@@ -399,6 +435,12 @@ def apply_theme_mapping(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
         return df, pd.DataFrame()
 
     df["campaign_theme"] = df[COL_CAUSE].apply(map_theme)
+    # ============================================================
+    # TIME FEATURE
+    # ============================================================
+
+    if COL_MONTH in df.columns:
+        df["quarter"] = df[COL_MONTH].map(MONTH_TO_QUARTER)
 
     unmapped = (
         df.loc[df["campaign_theme"].isna(), COL_CAUSE]
@@ -815,3 +857,75 @@ def run_pipeline(
         "col_report":   col_report,
         "tag":          tag,
     }
+
+# ============================================================
+# FORECAST DATASET
+# ============================================================
+
+def prepare_forecast_dataset(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    เตรียม Dataset สำหรับ Machine Learning Forecast
+    Target = campaign_theme
+    """
+
+    feature_cols = [
+
+        "year",
+        "quarter",
+
+        COL_AREA,
+
+        "rider_exp_group",
+
+        COL_VEHICLE,
+
+        COL_PERIOD,
+
+        COL_VISIBILITY,
+
+        COL_ROAD_SURFACE,
+
+        COL_ROAD_TYPE,
+
+        COL_TRAFFIC,
+
+        COL_SPEED_GROUP,
+
+        COL_4M1E,
+
+    ]
+
+    feature_cols = [c for c in feature_cols if c in df.columns]
+
+    train_df = df[
+        feature_cols + ["campaign_theme"]
+    ].copy()
+
+    # เติม Unknown ให้ Feature ที่ขาด
+    fill_cols = [
+        "rider_exp_group",
+        COL_VISIBILITY,
+        COL_ROAD_SURFACE,
+        COL_ROAD_TYPE,
+        COL_TRAFFIC,
+        COL_SPEED_GROUP,
+    ]
+
+    for c in fill_cols:
+        if c in train_df.columns:
+            train_df[c] = (
+            train_df[c]
+            .astype(str)
+            .replace("nan", "Unknown")
+            .replace("<NA>", "Unknown")
+        )
+
+    # ลบเฉพาะแถวที่ไม่มี Target
+    train_df = train_df.dropna(
+        subset=[
+            "campaign_theme",
+            COL_4M1E,
+        ]
+    )
+
+    return train_df

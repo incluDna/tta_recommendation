@@ -265,8 +265,8 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-tab_dash, tab_insight, tab_campaign, tab_insurance = st.tabs([
-    "📊 dashboard", "🔍 insight", "🎯 campaign", "🛡️ insurance",
+tab_dash, tab_insight, tab_campaign, tab_pred, tab_insurance = st.tabs([
+    "📊 dashboard", "🔍 insight", "🎯 campaign", "🔮 prediction⭐", "🛡️ insurance",
 ])
 # tab_dash, tab_insight, tab_campaign, tab_insurance = st.tabs([
 #     "📊 dashboard", "🔍 insight", "🎯 campaign", "🛡️ insurance",
@@ -708,9 +708,99 @@ with tab_campaign:
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )
 
+# ══════════════════════════════════════════════════════════════════
+# TAB 4 — PREDICTION (Q3 - Q4 Forecasting)
+# ══════════════════════════════════════════════════════════════════
+with tab_pred:
+    st.header("🔮 Q3 - Q4 Predictive Risk")
+    st.caption("การพยากรณ์ความเสี่ยงและสาเหตุอุบัติเหตุล่วงหน้าด้วย Machine Learning (Random Forest + YoY Trend Weighting)")
+
+    # อ่านไฟล์ผลลัพธ์การพยากรณ์ที่ Export ไว้ หรือสร้างพยากรณ์แบบ Dynamic
+    pred_file = Path("data/forecast_sub_causes_q3_q4_2569.csv")
+    
+    if not pred_file.exists():
+        st.warning("⚠️ ไม่พบไฟล์พยากรณ์ กรุณารันโมเดล ML เพื่อสร้างไฟล์ `forecast_sub_causes_q3_q4_2569.csv` ก่อน")
+    else:
+        df_pred = pd.read_csv(pred_file)
+
+        # Filters สำหรับหน้า Prediction
+        pf1, pf2 = st.columns(2)
+        with pf1:
+            sel_pred_q = st.selectbox("📅 เลือกไตรมาสพยากรณ์", options=["Q3", "Q4"], index=0)
+        with pf2:
+            pred_area_opts = sorted(df_pred["พื้นที่"].dropna().unique().tolist(), key=natural_sort_key)
+            sel_pred_area = st.selectbox("📍 เลือกพื้นที่", options=["ทั้งหมด"] + pred_area_opts, index=0)
+
+        # Filter Data
+        df_p_filtered = df_pred[df_pred["Quarter"] == sel_pred_q]
+        if sel_pred_area != "ทั้งหมด":
+            df_p_filtered = df_p_filtered[df_p_filtered["พื้นที่"] == sel_pred_area]
+
+        st.markdown("---")
+
+        # KPI Metrics
+        pk1, pk2, pk3 = st.columns(3)
+        top_predicted_theme = df_p_filtered.groupby("Predicted_Theme")["Estimated_Cause_Probability (%)"].sum().idxmax() if not df_p_filtered.empty else "-"
+        high_trend_count = len(df_p_filtered[df_p_filtered["Q1-Q2_Trend_Multiplier"] > 1.1]["พื้นที่"].unique())
+        
+        pk1.metric("ไตรมาสที่พยากรณ์", sel_pred_q)
+        pk2.metric("Theme ความเสี่ยงสูงสุด", top_predicted_theme)
+        pk3.metric("จำนวนพื้นที่ที่มี Trend เสี่ยงพุ่งสูง (YoY > 1.1x)", f"{high_trend_count} พื้นที่")
+
+        st.markdown("---")
+
+        # Charts Display
+        c_pred1, c_pred2 = st.columns(2)
+
+        with c_pred1:
+            st.markdown(f"#### 📊 สัดส่วนความเสี่ยงตาม Theme ({sel_pred_q})")
+            theme_summary = df_p_filtered.groupby("Predicted_Theme")["Estimated_Cause_Probability (%)"].mean().reset_index()
+            fig_p_theme = px.bar(
+                theme_summary, x="Predicted_Theme", y="Estimated_Cause_Probability (%)",
+                color="Predicted_Theme", color_discrete_map=THEME_COLOR,
+                title="โอกาสเกิดอุบัติเหตุเฉลี่ยตาม Theme (%)"
+            )
+            fig_p_theme.update_layout(showlegend=False, height=350)
+            st.plotly_chart(fig_p_theme, use_container_width=True, config={"displayModeBar": False})
+
+        with c_pred2:
+            st.markdown(f"#### 🔝 Top 5 สาเหตุย่อยที่มีแนวโน้มเกิดสูงสุด ({sel_pred_q})")
+            
+            # Group By สาเหตุย่อยก่อน เพื่อรวมค่าจากทุกพื้นที่เข้ามา และตัดตัวซ้ำ
+            top_causes_pred = (
+                df_p_filtered.groupby(["Sub_Cause (สาเหตุย่อย)", "Predicted_Theme"], as_index=False)
+                ["Estimated_Cause_Probability (%)"]
+                .mean() # หรือใช้ .sum() ตามความเหมาะสม
+                .sort_values(by="Estimated_Cause_Probability (%)", ascending=False)
+                .head(5)
+            )
+
+            fig_p_cause = px.bar(
+                top_causes_pred, 
+                x="Estimated_Cause_Probability (%)", 
+                y="Sub_Cause (สาเหตุย่อย)",
+                orientation="h", 
+                color="Predicted_Theme", 
+                color_discrete_map=THEME_COLOR,
+                title="Top 5 Sub-Causes Risk Score (%)"
+            )
+            fig_p_cause.update_layout(
+                yaxis={"categoryorder": "total ascending"}, 
+                height=350,
+                margin=dict(l=20, r=20, t=40, b=20)
+            )
+            st.plotly_chart(fig_p_cause, use_container_width=True, config={"displayModeBar": False})
+
+        st.markdown("---")
+        st.markdown("#### 📋 ตารางพยากรณ์ฉบับเต็ม")
+        st.dataframe(
+            df_p_filtered.style.background_gradient(subset=["Estimated_Cause_Probability (%)"], cmap="YlOrRd"),
+            use_container_width=True,
+            hide_index=True
+        )
 
 # ══════════════════════════════════════════════════════════════════
-# TAB 4 — INSURANCE
+# TAB 5 — INSURANCE
 # ══════════════════════════════════════════════════════════════════
 with tab_insurance:
     col_title, col_info = st.columns([10, 1])
