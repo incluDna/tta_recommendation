@@ -5,7 +5,7 @@ Campaign recommendation: https://tta-recommendation.streamlit.app/
 
 Prediction: https://includna.github.io/tta_recommendation/
 
-### [คู่มือการใช้งาน](https://github.com/incluDna/tta_recommendation/assets/final_tta_recommend.pdf)
+### [คู่มือการใช้งาน](https://github.com/incluDna/tta_recommendation/blob/8bbf75a3c6d71a16d6ffc93b2a0b01d878c69646/assets/final_tta_recommend.pdf)
 
 ### Upload file
 - upload file ใน `/data` และ เลือก sheet ที่มี data อยู่ (กรณี run localhost)
