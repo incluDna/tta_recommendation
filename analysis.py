@@ -8,6 +8,8 @@ from pathlib import Path
 from typing import Optional
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.preprocessing import OrdinalEncoder
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import accuracy_score
 
 import numpy as np
 import pandas as pd
@@ -839,6 +841,17 @@ def process_data_and_forecast(file68_path, file69_path, sheet68=5, sheet69=0):
     """
     ฟังก์ชันหลักสำหรับให้ app.py เรียกใช้
     รับไฟล์ปี 68 และ 69 -> ทำการ Clean -> Train Model -> Forecast Q3-Q4 / 2569
+
+    Returns
+    -------
+    final_forecast_df : pd.DataFrame
+        ผลพยากรณ์ Q3-Q4 ระดับ Sub-Cause พร้อม Q1-Q2 YoY Trend Multiplier
+    df : pd.DataFrame
+        ข้อมูลรวม (ปี 68 + 69) หลังทำความสะอาดและ feature engineering แล้ว
+    accuracy : float
+        Model Accuracy (%) จากการประเมินด้วย train/test split (80/20)
+    feature_importance_df : pd.DataFrame
+        Feature importance (%) ของแต่ละตัวแปร เรียงจากมากไปน้อย
     """
     # 1. Load Data
     df68 = pd.read_excel(file68_path, sheet_name=sheet68)
@@ -886,7 +899,29 @@ def process_data_and_forecast(file68_path, file69_path, sheet68=5, sheet69=0):
     encoder = OrdinalEncoder(handle_unknown='use_encoded_value', unknown_value=-1)
     X_encoded = pd.DataFrame(encoder.fit_transform(X), columns=model_features)
 
-    # Train Random Forest
+    # 6b. Model Evaluation (train/test split) — ported from notebook cell 24
+    #     ใช้ประเมิน Accuracy และ Feature Importance โดยไม่กระทบโมเดลที่ใช้พยากรณ์จริง (fit บน full data ด้านล่าง)
+    try:
+        X_train, X_test, y_train, y_test = train_test_split(
+            X_encoded, y, test_size=0.2, random_state=42, stratify=y
+        )
+    except ValueError:
+        # stratify ล้มเหลวถ้าบาง class มีข้อมูลน้อยเกินไป -> fallback แบบไม่ stratify
+        X_train, X_test, y_train, y_test = train_test_split(
+            X_encoded, y, test_size=0.2, random_state=42
+        )
+
+    eval_model = RandomForestClassifier(n_estimators=200, max_depth=10, random_state=42, n_jobs=-1)
+    eval_model.fit(X_train, y_train)
+    y_pred = eval_model.predict(X_test)
+    accuracy = round(accuracy_score(y_test, y_pred) * 100, 2)
+
+    feature_importance_df = pd.DataFrame({
+        "Feature": model_features,
+        "Importance (%)": (eval_model.feature_importances_ * 100).round(2),
+    }).sort_values(by="Importance (%)", ascending=False).reset_index(drop=True)
+
+    # Train Random Forest (final model, fit on ALL data — ใช้พยากรณ์ Q3-Q4 จริง)
     rf_model = RandomForestClassifier(n_estimators=200, max_depth=10, random_state=42, n_jobs=-1)
     rf_model.fit(X_encoded, y)
 
@@ -962,4 +997,4 @@ def process_data_and_forecast(file68_path, file69_path, sheet68=5, sheet69=0):
                     })
 
     final_forecast_df = pd.DataFrame(forecast_results)
-    return final_forecast_df, df
+    return final_forecast_df, df, accuracy, feature_importance_df
