@@ -1,12 +1,18 @@
 # analysis.py — pipeline functions (ไม่มี Streamlit dependency)
 # ─────────────────────────────────────────────────────────────────
+import os
+import warnings
 import re
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.preprocessing import OrdinalEncoder
 
 import numpy as np
 import pandas as pd
+
+warnings.filterwarnings('ignore')
 
 from config import (
     AREA_INSURANCE_MAP,
@@ -49,6 +55,12 @@ from config import (
     RIDER_INSURANCE_MAP,
     RISK_WEIGHTS,
     THEMES,
+    RENAME_DICT_69, 
+    CAUSE_THEME, 
+    MONTH_MAP, 
+    MODEL_FEATURES, 
+    DEFAULT_CAUSE_COL, 
+    DEFAULT_THEME
 )
 
 try:
@@ -757,3 +769,197 @@ def prepare_forecast_dataset(df: pd.DataFrame) -> pd.DataFrame:
 
     train_df = train_df.dropna(subset=["campaign_theme", COL_4M1E])
     return train_df
+
+def clean_excel_dataframe(df: pd.DataFrame) -> pd.DataFrame:
+    """ลบ Unnamed และคอลัมน์ที่เป็นค่าว่างทั้งหมด (แปลงชื่อคอลัมน์เป็น String ก่อนดักจับ)"""
+    df = df.copy()
+    valid_cols = [col for col in df.columns if not str(col).startswith("Unnamed")]
+    df = df[valid_cols].dropna(axis=1, how="all")
+    return df
+
+def extract_quarter(df: pd.DataFrame) -> pd.DataFrame:
+    """ค้นหาและแปลงคอลัมน์เดือนให้เป็น Quarter (Q1-Q4)"""
+    df = df.copy()
+    month_col = None
+    for col in df.columns:
+        if "เดือน" in str(col):
+            month_col = col
+            break
+
+    if month_col is not None:
+        clean_month_series = df[month_col].astype(str).str.strip().str.lower()
+        df['quarter'] = clean_month_series.map(MONTH_MAP)
+    else:
+        df['quarter'] = np.nan
+    return df
+
+def find_cause_column(df: pd.DataFrame) -> str:
+    """ค้นหาคอลัมน์สาเหตุที่แท้จริงแบบยืดหยุ่น"""
+    for col in df.columns:
+        if "สาเหตุที่แท้จริง" in str(col):
+            return col
+    return "สาเหตุที่แท้จริงจากการเกิดอุบัติเหตุ (เช่น คุยโทรศัพท์ ขับรถมือเดียว รถตัดหน้า ซ้อนท้าย )"
+
+def map_theme_safe(val) -> str:
+    """แปลงสาเหตุเป็น Campaign Theme (ดัก float/nan ไม่ให้พัง)"""
+    if pd.isna(val) or val is None:
+        return "Defensive Driving"
+    val_str = str(val).strip()
+    for k, v in CAUSE_THEME.items():
+        if str(k) in val_str:
+            return v
+    return "Defensive Driving"
+
+def classify_4m1e_safe(row, cause_col: str) -> str:
+    """จัดกลุ่ม 4M1E อัตโนมัติ (ดัก float/nan ไม่ให้พัง)"""
+    cause_val = row.get(cause_col)
+    surface_val = row.get('สภาพผิวจราจร')
+    
+    cause = "" if pd.isna(cause_val) else str(cause_val).lower()
+    surface = "" if pd.isna(surface_val) else str(surface_val).lower()
+    
+    if any(k in cause for k in ['ถนน', 'ลื่น', 'ชำรุด', 'สัตว์', 'หลุม', 'ฝน']) or 'ลื่น' in surface:
+        return 'Environment'
+    if any(k in cause for k in ['ยางแตก', 'เบรกไม่อยู่', 'เบรกขัดข้อง', 'รถเสีย', 'โซ่หลุด']):
+        return 'Machine'
+    if any(k in cause for k in ['ย้อนศร', 'ผิดกฎ', 'แซง']):
+        return 'Method'
+    return 'Man'
+
+def get_mode_safe(series: pd.Series, default_val: str = "Unknown") -> str:
+    """หาค่า Mode อย่างปลอดภัย ป้องกัน IndexError"""
+    m = series.dropna().mode()
+    return str(m.iloc[0]) if not m.empty else default_val
+
+
+# ==============================================================================
+# MAIN PROCESSING & FORECASTING PIPELINE
+# ==============================================================================
+def process_data_and_forecast(file68_path, file69_path, sheet68=5, sheet69=0):
+    """
+    ฟังก์ชันหลักสำหรับให้ app.py เรียกใช้
+    รับไฟล์ปี 68 และ 69 -> ทำการ Clean -> Train Model -> Forecast Q3-Q4 / 2569
+    """
+    # 1. Load Data
+    df68 = pd.read_excel(file68_path, sheet_name=sheet68)
+    df69 = pd.read_excel(file69_path, sheet_name=sheet69)
+
+    # 2. Clean Excel structure
+    df68 = clean_excel_dataframe(df68)
+    df69 = clean_excel_dataframe(df69)
+
+    # Align columns
+    df69 = df69.rename(columns=RENAME_DICT_69)
+    df69 = df69.drop(columns=["หลักสูตรความปลอดภัย6ชม.(ไม่เก็บเงิน)"], errors="ignore")
+
+    df68['year'] = 2568
+    df69['year'] = 2569
+
+    # 3. Extract Quarter
+    df68 = extract_quarter(df68)
+    df69 = extract_quarter(df69)
+
+    # 4. Merge Data
+    df = pd.concat([df68, df69], ignore_index=True)
+
+    # Clean String Fields
+    for col in df.select_dtypes(include=['object', 'string']).columns:
+        df[col] = df[col].astype(str).str.strip().replace({"": np.nan, "nan": np.nan, "<NA>": np.nan})
+
+    # 5. Dynamic Cause Column & Feature Engineering
+    cause_col = find_cause_column(df)
+    df['campaign_theme'] = df[cause_col].apply(map_theme_safe)
+    df['4M1E_Cleaned'] = df.apply(lambda row: classify_4m1e_safe(row, cause_col), axis=1)
+
+    feature_cols = ['พื้นที่', 'ทัศนวิสัย', 'สภาพผิวจราจร', 'ลักษณะเส้นทาง', 'สภาพการจราจร', '4M1E_Cleaned']
+    for c in feature_cols:
+        if c not in df.columns:
+            df[c] = "Unknown"
+        else:
+            df[c] = df[c].fillna("Unknown")
+
+    # 6. Prepare Model
+    model_features = ['quarter', 'พื้นที่', 'ทัศนวิสัย', 'สภาพผิวจราจร', 'ลักษณะเส้นทาง', 'สภาพการจราจร', '4M1E_Cleaned']
+    X = df[model_features].astype(str).copy()
+    y = df['campaign_theme'].astype(str).copy()
+
+    encoder = OrdinalEncoder(handle_unknown='use_encoded_value', unknown_value=-1)
+    X_encoded = pd.DataFrame(encoder.fit_transform(X), columns=model_features)
+
+    # Train Random Forest
+    rf_model = RandomForestClassifier(n_estimators=200, max_depth=10, random_state=42, n_jobs=-1)
+    rf_model.fit(X_encoded, y)
+
+    # 7. Forecasting (Q3 & Q4 / 2569)
+    areas = df['พื้นที่'].dropna().unique()
+    quarters = ['Q3', 'Q4']
+    predict_rows = []
+
+    for q in quarters:
+        for a in areas:
+            area_df = df[df['พื้นที่'] == a]
+            if len(area_df) == 0: 
+                continue
+            
+            predict_rows.append({
+                'quarter': q,
+                'พื้นที่': a,
+                'ทัศนวิสัย': get_mode_safe(area_df['ทัศนวิสัย']),
+                'สภาพผิวจราจร': get_mode_safe(area_df['สภาพผิวจราจร']),
+                'ลักษณะเส้นทาง': get_mode_safe(area_df['ลักษณะเส้นทาง']),
+                'สภาพการจราจร': get_mode_safe(area_df['สภาพการจราจร']),
+                '4M1E_Cleaned': get_mode_safe(area_df['4M1E_Cleaned'])
+            })
+
+    future_df = pd.DataFrame(predict_rows).astype(str)
+    future_encoded = pd.DataFrame(encoder.transform(future_df[model_features]), columns=model_features)
+
+    probs = rf_model.predict_proba(future_encoded)
+    classes = rf_model.classes_
+
+    forecast_results = []
+
+    for idx, row in future_df.iterrows():
+        area = row['พื้นที่']
+        q = row['quarter']
+        
+        for c_idx, theme in enumerate(classes):
+            theme_prob = probs[idx, c_idx]
+            area_df = df[df['พื้นที่'] == area]
+            
+            # คำนวณ YoY Trend Factor (Q1-Q2 68 vs 69)
+            q12_68 = area_df[(area_df['year'] == 2568) & (area_df['quarter'].isin(['Q1', 'Q2'])) & (area_df['campaign_theme'] == theme)]
+            q12_69 = area_df[(area_df['year'] == 2569) & (area_df['quarter'].isin(['Q1', 'Q2'])) & (area_df['campaign_theme'] == theme)]
+            
+            total_68 = len(area_df[area_df['year'] == 2568])
+            total_69 = len(area_df[area_df['year'] == 2569])
+            
+            trend_factor = 1.0
+            if total_68 > 0 and total_69 > 0:
+                ratio_68 = len(q12_68) / total_68
+                ratio_69 = len(q12_69) / total_69
+                if ratio_68 > 0:
+                    trend_factor = ratio_69 / ratio_68
+                    trend_factor = np.clip(trend_factor, 0.8, 1.5)
+                elif ratio_69 > 0:
+                    trend_factor = 1.2
+
+            area_causes = area_df[area_df['campaign_theme'] == theme]
+            if len(area_causes) > 0:
+                top_causes = area_causes[cause_col].value_counts(normalize=True).head(3)
+                
+                for cause_name, ratio in top_causes.items():
+                    adjusted_cause_prob = theme_prob * ratio * trend_factor * 100
+                    
+                    forecast_results.append({
+                        'Quarter': q,
+                        'พื้นที่': area,
+                        'Predicted_Theme': theme,
+                        'Base_Theme_Prob (%)': round(theme_prob * 100, 2),
+                        'Q1-Q2_Trend_Multiplier': round(trend_factor, 2),
+                        'Sub_Cause (สาเหตุย่อย)': cause_name,
+                        'Estimated_Cause_Probability (%)': round(adjusted_cause_prob, 2)
+                    })
+
+    final_forecast_df = pd.DataFrame(forecast_results)
+    return final_forecast_df, df

@@ -260,6 +260,21 @@ MONTH_ORDER = [
 ]
 MONTH_ABBR_ORDER = [m[:3] for m in MONTH_ORDER]
 
+MONTH_MAP = {
+    'ม.ค.': 'Q1', 'มกราคม': 'Q1', 'jan': 'Q1', 'january': 'Q1', '1': 'Q1', '01': 'Q1', '1.0': 'Q1',
+    'ก.พ.': 'Q1', 'กุมภาพันธ์': 'Q1', 'feb': 'Q1', 'february': 'Q1', '2': 'Q1', '02': 'Q1', '2.0': 'Q1',
+    'มี.ค.': 'Q1', 'มีนาคม': 'Q1', 'mar': 'Q1', 'march': 'Q1', '3': 'Q1', '03': 'Q1', '3.0': 'Q1',
+    'เม.ย.': 'Q2', 'เมษายน': 'Q2', 'apr': 'Q2', 'april': 'Q2', '4': 'Q2', '04': 'Q2', '4.0': 'Q2',
+    'พ.ค.': 'Q2', 'พฤษภาคม': 'Q2', 'may': 'Q2', '5': 'Q2', '05': 'Q2', '5.0': 'Q2',
+    'มิ.ย.': 'Q2', 'มิถุนายน': 'Q2', 'jun': 'Q2', 'june': 'Q2', '6': 'Q2', '06': 'Q2', '6.0': 'Q2',
+    'ก.ค.': 'Q3', 'กรกฎาคม': 'Q3', 'jul': 'Q3', 'july': 'Q3', '7': 'Q3', '07': 'Q3', '07.0': 'Q3',
+    'ส.ค.': 'Q3', 'สิงหาคม': 'Q3', 'aug': 'Q3', 'august': 'Q3', '8': 'Q3', '08': 'Q3', '8.0': 'Q3',
+    'ก.ย.': 'Q3', 'กันยายน': 'Q3', 'sep': 'Q3', 'september': 'Q3', '9': 'Q3', '09': 'Q3', '9.0': 'Q3',
+    'ต.ค.': 'Q4', 'ตุลาคม': 'Q4', 'oct': 'Q4', 'october': 'Q4', '10': 'Q4', '10.0': 'Q4',
+    'พ.ย.': 'Q4', 'พฤศจิกายน': 'Q4', 'nov': 'Q4', 'november': 'Q4', '11': 'Q4', '11.0': 'Q4',
+    'ธ.ค.': 'Q4', 'ธันวาคม': 'Q4', 'dec': 'Q4', 'december': 'Q4', '12': 'Q4', '12.0': 'Q4',
+}
+
 # Fuzzy match threshold (rapidfuzz)
 FUZZY_THRESHOLD = 97
 
@@ -321,28 +336,18 @@ RIDER_INSURANCE_MAP = {
     ("Defensive Driving",     "ไม่หยุดงาน"):          "PA พื้นฐาน",
 }
 
-# THEME_COLUMNS = {
+RENAME_DICT_69 = {
+    "TradeArea จากร้านถึงจุดเกิดเหตุ": "Trade Area จากร้านถึงจุดเกิดเหตุ",
+    "TradeArea ร้านถึงลูกค้ารับของ(กม.)": "Trade Area ร้านถึงลูกค้ารับของ (กม.)",
+    "ผลของการเกิดอุบัติเหตุ (เสียชีวิต/สูญเสียอวัยวะ/บาดเจ็บ)": "(เสียชีวิต/สูญเสียอวัยวะ/บาดเจ็บ)"
+}
 
-#     "Defensive Driving": "defensive_pct",
-
-#     "Focus & Attention": "focus_pct",
-
-#     "Road & Vehicle Safety": "road_pct",
-
-#     "Speed Awareness": "speed_pct",
-# }
-
-
-# SCORE_COLUMNS = {
-
-#     "Defensive Driving": "defensive_score",
-
-#     "Focus & Attention": "focus_score",
-
-#     "Road & Vehicle Safety": "road_score",
-
-#     "Speed Awareness": "speed_score",
-# }
+# ==============================================================================
+# MODEL & PIPELINE CONSTANTS
+# ==============================================================================
+MODEL_FEATURES = ['quarter', 'พื้นที่', 'ทัศนวิสัย', 'สภาพผิวจราจร', 'ลักษณะเส้นทาง', 'สภาพการจราจร', '4M1E_Cleaned']
+DEFAULT_CAUSE_COL = "สาเหตุที่แท้จริงจากการเกิดอุบัติเหตุ (เช่น คุยโทรศัพท์ ขับรถมือเดียว รถตัดหน้า ซ้อนท้าย )"
+DEFAULT_THEME = "Defensive Driving"
 
 # ── Output paths ──────────────────────────────────────────────────
 OUTPUT_DIR            = "output"
