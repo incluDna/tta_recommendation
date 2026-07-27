@@ -802,6 +802,36 @@ def find_cause_column(df: pd.DataFrame) -> str:
             return col
     return "สาเหตุที่แท้จริงจากการเกิดอุบัติเหตุ (เช่น คุยโทรศัพท์ ขับรถมือเดียว รถตัดหน้า ซ้อนท้าย )"
 
+# ──────────────────────────────────────────────────────────────────────────
+# CAUSE_THEME dict คัดลอกตรงจาก forecast_model_final.ipynb (cell รวม pipeline สุดท้าย)
+# ใช้เฉพาะใน process_data_and_forecast() เท่านั้น — แยกจาก CAUSE_THEME ที่ import จาก
+# config.py (ตัวนั้นใช้ร่วมกับ tab อื่นๆ ในแอป เช่น dashboard/insight/campaign)
+# เพื่อการันตีว่าผลลัพธ์ตรงกับ notebook เป๊ะๆ (Accuracy 75.13% บนข้อมูลชุดเดียวกัน)
+# ──────────────────────────────────────────────────────────────────────────
+_NOTEBOOK_CAUSE_THEME = {
+    "เบรกกะทันหัน": "Defensive Driving", "ขับรถย้อนศร": "Defensive Driving", "ซ้อนท้าย": "Defensive Driving",
+    "เลี้ยวกระทันหัน": "Defensive Driving", "ฝ่าสัญญาณไฟจราจร": "Defensive Driving", "ตัดหน้า": "Defensive Driving",
+    "รถตัดหน้า": "Defensive Driving", "คนเดินข้ามถนนตัดหน้ารถ": "Defensive Driving", "ชนท้าย": "Defensive Driving",
+    "เปลี่ยนช่องทางกระทันหัน": "Defensive Driving", "เฉี่ยวชนคู่กรณี": "Defensive Driving", "แซงไม่พ้น": "Defensive Driving",
+    "ใช้โทรศัพท์ขณะขับขี่": "Focus & Attention", "คุยโทรศัพท์": "Focus & Attention", "ผู้ขับขี่ผิดพลาดเอง(ตัดสินใจพลาด)": "Focus & Attention",
+    "ง่วงนอน": "Focus & Attention", "ขับรถหลับใน": "Focus & Attention", "ประมาท": "Focus & Attention",
+    "มองไม่เห็น": "Focus & Attention", "ไม่ดูกระจกมองข้าง": "Focus & Attention", "ไม่คุ้นชินเส้นทาง": "Focus & Attention",
+    "เสียหลักล้ม": "Road & Vehicle Safety", "สัตว์ตัดหน้า": "Road & Vehicle Safety", "ถนนชำรุด": "Road & Vehicle Safety",
+    "ถนนลื่น": "Road & Vehicle Safety", "ฝนตกถนนลื่น": "Road & Vehicle Safety", "หลุมบ่อ": "Road & Vehicle Safety",
+    "เบรกไม่อยู่": "Road & Vehicle Safety", "ยางแตก": "Road & Vehicle Safety", "โซ่หลุด": "Road & Vehicle Safety",
+    "ขับรถเร็ว": "Speed Awareness", "ขับรถเร็วเกินกำหนด": "Speed Awareness", "เข้าโค้งเร็ว": "Speed Awareness", "ออกตัวเร็ว": "Speed Awareness",
+}
+
+def map_theme_notebook(val) -> str:
+    """แปลงสาเหตุ -> Campaign Theme โดยใช้ _NOTEBOOK_CAUSE_THEME (ดัก float/nan ไม่ให้พัง)"""
+    if pd.isna(val) or val is None:
+        return "Defensive Driving"
+    val_str = str(val).strip()
+    for k, v in _NOTEBOOK_CAUSE_THEME.items():
+        if k in val_str:
+            return v
+    return "Defensive Driving"
+
 def map_theme_safe(val) -> str:
     """แปลงสาเหตุเป็น Campaign Theme (ดัก float/nan ไม่ให้พัง)"""
     if pd.isna(val) or val is None:
@@ -881,7 +911,7 @@ def process_data_and_forecast(file68_path, file69_path, sheet68=5, sheet69=0):
 
     # 5. Dynamic Cause Column & Feature Engineering
     cause_col = find_cause_column(df)
-    df['campaign_theme'] = df[cause_col].apply(map_theme_safe)
+    df['campaign_theme'] = df[cause_col].apply(map_theme_notebook)
     df['4M1E_Cleaned'] = df.apply(lambda row: classify_4m1e_safe(row, cause_col), axis=1)
 
     feature_cols = ['พื้นที่', 'ทัศนวิสัย', 'สภาพผิวจราจร', 'ลักษณะเส้นทาง', 'สภาพการจราจร', '4M1E_Cleaned']
