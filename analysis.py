@@ -80,7 +80,16 @@ def get_sheet_names(folder: str, filename: str) -> list[str]:
 def load_raw(folder: str, filename: str, sheet) -> pd.DataFrame:
     """โหลด sheet จาก Excel → DataFrame ดิบ"""
     path = Path(folder) / filename
-    return pd.read_excel(path, sheet_name=sheet, engine="openpyxl")
+    df_raw = pd.read_excel(path, sheet_name=sheet, engine="openpyxl")
+    # หากพบว่าคอลัมน์แรกๆ มีคำว่า Unnamed เยอะ ให้ลองเลื่อน header ลงมาหาแถวที่มีคำว่า "พื้นที่" หรือ "สาเหตุ"
+    if any("Unnamed" in str(c) for c in df_raw.columns[:5]):
+        for idx, row in df_raw.iterrows():
+            row_str = row.astype(str).values
+            if any("พื้นที่" in s or "สาเหตุ" in s for s in row_str):
+                df_raw = pd.read_excel(path, sheet_name=sheet, skiprows=idx+1, engine="openpyxl")
+                break
+                
+    return df_raw
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -195,6 +204,7 @@ def resolve_columns(df: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
 def clean(df: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
     """ทำความสะอาดข้อมูลเบื้องต้นและแปลงชนิดข้อมูลให้ถูกต้อง"""
     df = df.copy()
+    df = df.loc[:, ~df.columns.astype(str).str.contains("^Unnamed", na=False)].dropna(axis=1, how="all")
     df = df.rename(columns=COLUMN_RENAME)
     df, col_report = resolve_columns(df)
 
