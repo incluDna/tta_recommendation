@@ -1,8 +1,5 @@
-# analysis.py — pipeline functions (ไม่มี Streamlit dependency ทั้งหมด)
-# ใช้ได้ทั้งใน app.py และ notebook
+# analysis.py — pipeline functions (ไม่มี Streamlit dependency)
 # ─────────────────────────────────────────────────────────────────
-# from __future__ import annotations
-
 import re
 from datetime import datetime
 from pathlib import Path
@@ -14,6 +11,7 @@ import pandas as pd
 from config import (
     AREA_INSURANCE_MAP,
     CAUSE_THEME,
+    COL_4M1E,
     COL_AGE,
     COL_AREA,
     COL_CAUSE,
@@ -21,14 +19,25 @@ from config import (
     COL_EMP_ID,
     COL_LEAVE,
     COL_MONTH,
+    COL_PERIOD,
+    COL_QUARTER,
     COL_RIDER_EXP,
+    COL_ROAD_SURFACE,
+    COL_ROAD_TYPE,
     COL_SEVERITY,
     COL_SPEED,
+    COL_SPEED_GROUP,
     COL_TIME,
+    COL_TRAFFIC,
+    COL_VEHICLE,
+    COL_VISIBILITY,
+    COL_YEAR,
+    COLUMN_RENAME,
     DROP_COLS,
     FUZZY_THRESHOLD,
     MONTH_ABBR_ORDER,
     MONTH_ORDER,
+    MONTH_TO_QUARTER,
     NORMALIZE_DICT,
     OUT_AREA_FILE,
     OUT_JOINED_FILE,
@@ -40,18 +49,6 @@ from config import (
     RIDER_INSURANCE_MAP,
     RISK_WEIGHTS,
     THEMES,
-    MONTH_TO_QUARTER,
-    COLUMN_RENAME,
-    COL_VEHICLE,
-    COL_PERIOD,
-    COL_VISIBILITY,
-    COL_ROAD_SURFACE,
-    COL_ROAD_TYPE,
-    COL_TRAFFIC,
-    COL_SPEED_GROUP,
-    COL_4M1E,
-    COL_YEAR,
-    COL_QUARTER,
 )
 
 try:
@@ -68,38 +65,32 @@ except ImportError:
 def list_excel_files(folder: str) -> list[str]:
     """คืน list ชื่อไฟล์ .xlsx / .xls ใน folder (เรียงตามชื่อ)"""
     p = Path(folder)
-    files = sorted(
-        f.name for f in p.glob("*.xls*") if not f.name.startswith("~$")
-    )
-    return files
+    if not p.exists():
+        return []
+    return sorted(f.name for f in p.glob("*.xls*") if not f.name.startswith("~$"))
 
 
 def get_sheet_names(folder: str, filename: str) -> list[str]:
-    """
-    คืน list ชื่อ sheet ในไฟล์ Excel
-    ใช้ ExcelFile เพื่อไม่ต้องโหลด data ทั้งหมด
-    """
+    """คืน list ชื่อ sheet ในไฟล์ Excel"""
     path = Path(folder) / filename
     with pd.ExcelFile(path, engine="openpyxl") as xf:
         return xf.sheet_names
 
 
 def load_raw(folder: str, filename: str, sheet) -> pd.DataFrame:
-    """
-    โหลด sheet จาก Excel → DataFrame ดิบ
-    sheet: ชื่อ (str) หรือ index (int)
-    """
+    """โหลด sheet จาก Excel → DataFrame ดิบ"""
     path = Path(folder) / filename
-    df = pd.read_excel(path, sheet_name=sheet, engine="openpyxl")
-    return df
+    return pd.read_excel(path, sheet_name=sheet, engine="openpyxl")
 
 
 # ═══════════════════════════════════════════════════════════════════
-# 2. COLUMN RESOLVER (fuzzy-safe — กัน \n, space เกิน, พิมพ์เพี้ยน)
+# 2. COLUMN RESOLVER & SORTING UTILITIES
 # ═══════════════════════════════════════════════════════════════════
 
 _REQUIRED_COLS = [COL_AREA, COL_CAUSE, COL_SEVERITY]
-_OPTIONAL_COLS = [COL_AGE, COL_SPEED, COL_LEAVE, COL_TIME, COL_MONTH, COL_RIDER_EXP, COL_DRIVER_EXP]
+_OPTIONAL_COLS = [
+    COL_AGE, COL_SPEED, COL_LEAVE, COL_TIME, COL_MONTH, COL_RIDER_EXP, COL_DRIVER_EXP
+]
 _FUZZY_COL_THRESHOLD = 80
 
 
@@ -107,63 +98,47 @@ def _col_key(text: str) -> str:
     """ลบ whitespace ทั้งหมด → เปรียบเทียบแบบ whitespace-agnostic"""
     return re.sub(r"\s+", "", str(text))
 
+
 def natural_sort_key(text) -> tuple:
-    """
-    Key สำหรับเรียงชื่อพื้นที่แบบ 'ธรรมชาติ' — ตัวเลขในชื่อถูกเรียงตามค่าจริง
-    ไม่ใช่ตัวอักษร เช่น 'เขต 2' ต้องมาก่อน 'เขต 10' (string sort ปกติจะเรียง
-    'เขต 10' มาก่อน 'เขต 2' เพราะเทียบทีละตัวอักษร '1' < '2')
-    ใช้แบบ: sorted(area_list, key=natural_sort_key)
-    หรือ:   df.sort_values(COL_AREA, key=lambda s: s.map(natural_sort_key))
-    """
+    """Key สำหรับเรียงชื่อพื้นที่แบบธรรมชาติ (e.g. เขต 2 ก่อน เขต 10)"""
     text = str(text)
     parts = re.split(r"(\d+)", text)
     return tuple(int(p) if p.isdigit() else p for p in parts)
 
 
 def _normalize_month_name(text) -> str:
-    """Normalize ชื่อเดือน: ตัด whitespace, ทำให้ตัวแรกใหญ่ (Title case)
-    รองรับทั้ง 'january', 'JAN', 'Jan', 'January' → คืนรูปแบบเดียวกัน"""
     if pd.isna(text):
         return text
     return str(text).strip().title()
 
 
 def month_sort_key(month_name) -> int:
-    """
-    Key สำหรับเรียงเดือนตามปฏิทิน (Jan → Dec) แทน string sort (April มาก่อน January)
-    รองรับทั้งชื่อเต็ม (January) และตัวย่อ (Jan) ไม่ตรง format ก็ไม่ error — เดือนที่ไม่รู้จักไปอยู่ท้ายสุด
-    """
+    """Key สำหรับเรียงเดือนตามปฏิทิน (Jan → Dec)"""
     name = _normalize_month_name(month_name)
     if name in MONTH_ORDER:
         return MONTH_ORDER.index(name)
     if name in MONTH_ABBR_ORDER:
         return MONTH_ABBR_ORDER.index(name)
-    # เผื่อเขียนแบบ 3 ตัวอักษรแต่ case ไม่ตรง (เช่น 'jan')
     name3 = name[:3]
     if name3 in MONTH_ABBR_ORDER:
         return MONTH_ABBR_ORDER.index(name3)
-    return 999   # ไม่รู้จัก → ไปท้ายสุด ไม่ error
+    return 999
 
 
 def get_month_order(month_series: pd.Series) -> list[str]:
-    """คืน list ชื่อเดือนที่มีอยู่จริงใน series นั้น เรียงตามปฏิทินแล้ว
-    ใช้ใส่ category_orders ของ plotly หรือ pd.Categorical"""
+    """คืน list ชื่อเดือนที่มีอยู่จริงใน series เรียงตามปฏิทินแล้ว"""
     unique_months = month_series.dropna().unique().tolist()
     return sorted(unique_months, key=month_sort_key)
 
+
 def resolve_columns(df: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
     """
-    1. strip whitespace/\\n จากชื่อ column ทั้งหมด
-    2. fuzzy match column ที่ยังหาไม่เจอ
-    3. raise ValueError ชัดๆ ถ้า required column หายไป
-    คืน (df ที่ rename แล้ว, col_report สำหรับ debug)
+    1. Strip whitespace/\n จากชื่อ column
+    2. Fuzzy match column
+    3. Raise ValueError หาก missing required columns
     """
     df = df.copy()
-
-    # Step 1: strip whitespace/\n
-    df.columns = pd.Index([
-        re.sub(r"\s+", " ", str(c)).strip() for c in df.columns
-    ])
+    df.columns = pd.Index([re.sub(r"\s+", " ", str(c)).strip() for c in df.columns])
 
     all_targets = _REQUIRED_COLS + _OPTIONAL_COLS + DROP_COLS
     rename_map: dict[str, str] = {}
@@ -174,7 +149,6 @@ def resolve_columns(df: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
     for target in all_targets:
         target_key = _col_key(target)
 
-        # exact match (whitespace-agnostic)
         if target_key in actual_key_map:
             actual = actual_key_map[target_key]
             if actual != target:
@@ -184,7 +158,6 @@ def resolve_columns(df: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
                 col_report[target] = "exact"
             continue
 
-        # fuzzy match
         if _RAPIDFUZZ_AVAILABLE:
             result = fuzz_process.extractOne(target, df.columns.tolist())
             if result and result[1] >= _FUZZY_COL_THRESHOLD:
@@ -216,30 +189,19 @@ def resolve_columns(df: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
 
 
 # ═══════════════════════════════════════════════════════════════════
-# 3. CLEANING
+# 3. CLEANING & FEATURE ENGINEERING
 # ═══════════════════════════════════════════════════════════════════
 
 def clean(df: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
-    """
-    2.0 resolve_columns (fuzzy-safe) — หยุดทันทีถ้า required col หายไป
-    2.1 Drop PII / admin columns
-    2.2 Strip whitespace + normalize nan strings
-    2.3 Convert numeric cols (age, speed, leave)
-    คืน (df, col_report)
-    """
+    """ทำความสะอาดข้อมูลเบื้องต้นและแปลงชนิดข้อมูลให้ถูกต้อง"""
     df = df.copy()
-
     df = df.rename(columns=COLUMN_RENAME)
-
-    # 2.0 resolve (normalize + fuzzy + error)
     df, col_report = resolve_columns(df)
 
-    # 2.1 Drop PII + admin
     drop_normalized = {_col_key(c) for c in DROP_COLS}
     actual_drop = [c for c in df.columns if _col_key(c) in drop_normalized]
     df = df.drop(columns=actual_drop, errors="ignore")
 
-    # 2.2 Strip + normalize string
     str_cols = df.select_dtypes("object").columns
     for col in str_cols:
         df[col] = (
@@ -249,30 +211,23 @@ def clean(df: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
             .replace({"": np.nan, "nan": np.nan, "<NA>": np.nan, "None": np.nan})
         )
 
-    # 2.3 Convert numeric
     for col in [COL_AGE, COL_SPEED, COL_LEAVE]:
         if col in df.columns:
             df[col] = pd.to_numeric(df[col], errors="coerce")
 
-    # 2.4 Normalize เดือน (january / JAN / January → รูปแบบเดียวกัน)
     if COL_MONTH in df.columns:
         df[COL_MONTH] = df[COL_MONTH].apply(_normalize_month_name)
-    
+
     return df, col_report
 
 
-# ═══════════════════════════════════════════════════════════════════
-# 3. FEATURE ENGINEERING
-# ═══════════════════════════════════════════════════════════════════
-
 def _exp_to_months(text) -> float:
-    """แปลงข้อความประสบการณ์ → จำนวนเดือน"""
     if pd.isna(text):
         return np.nan
     text = str(text)
-    y = int(m.group(1)) if (m := re.search(r"(\d+)ปี", text))      else 0
-    mo= int(m.group(1)) if (m := re.search(r"(\d+)เดือน", text))   else 0
-    d = int(m.group(1)) if (m := re.search(r"(\d+)วัน", text))     else 0
+    y = int(m.group(1)) if (m := re.search(r"(\d+)ปี", text)) else 0
+    mo = int(m.group(1)) if (m := re.search(r"(\d+)เดือน", text)) else 0
+    d = int(m.group(1)) if (m := re.search(r"(\d+)วัน", text)) else 0
     w = int(m.group(1)) if (m := re.search(r"(\d+)สัปดาห์", text)) else 0
     return y * 12 + mo + d / 30 + w / 4
 
@@ -285,33 +240,34 @@ def _extract_hour(text) -> float:
 
 
 def _get_period(hour) -> str | float:
-    if pd.isna(hour): return np.nan
-    if hour < 6:      return "Late Night"
-    if hour < 12:     return "Morning"
-    if hour < 18:     return "Afternoon"
+    if pd.isna(hour):
+        return np.nan
+    if hour < 6:
+        return "Late Night"
+    if hour < 12:
+        return "Morning"
+    if hour < 18:
+        return "Afternoon"
     return "Night"
 
 
 def feature_engineer(df: pd.DataFrame) -> pd.DataFrame:
-    """เพิ่ม derived columns: exp_month, exp_group, age_group, hour, period"""
+    """เพิ่ม Features: ประสบการณ์, กลุ่มอายุ, ช่วงเวลา, Year, Quarter"""
     df = df.copy()
 
-    # Experience → months
     if COL_RIDER_EXP in df.columns:
         df["rider_exp_month"] = df[COL_RIDER_EXP].apply(_exp_to_months)
         df["rider_exp_group"] = (
             pd.cut(
-            df["rider_exp_month"],
-            bins=[-1, 3, 12, 24, 999],
-            labels=["<3m", "3-12m", "1-2y", ">2y"],
+                df["rider_exp_month"],
+                bins=[-1, 3, 12, 24, 999],
+                labels=["<3m", "3-12m", "1-2y", ">2y"],
+            ).astype(str)
         )
-        .astype(str)
-    )
 
     if COL_DRIVER_EXP in df.columns:
         df["driver_exp_month"] = df[COL_DRIVER_EXP].apply(_exp_to_months)
 
-    # Age group
     if COL_AGE in df.columns:
         df["age_group"] = pd.cut(
             df[COL_AGE],
@@ -319,30 +275,23 @@ def feature_engineer(df: pd.DataFrame) -> pd.DataFrame:
             labels=["<20", "20-25", "26-30", ">30"],
         )
 
-    # Time → hour + period
     if COL_TIME in df.columns:
-        df["hour"]   = df[COL_TIME].apply(_extract_hour)
+        df["hour"] = df[COL_TIME].apply(_extract_hour)
         df["period"] = df["hour"].apply(_get_period)
 
     date_col = "วันที่เกิดอุบัติเหตุ(พ.ศ. เท่านั้น)"
-
-    # year
     if date_col in df.columns:
-
-        year = (
+        df["year"] = (
             df[date_col]
             .astype(str)
             .str[:4]
-            .str[:4]                  # เอา 4 ตัวแรก
             .pipe(pd.to_numeric, errors="coerce")
             .astype("Int64")
         )
 
-        df["year"] = year
-    #quarter
     if COL_MONTH in df.columns:
         df["quarter"] = df[COL_MONTH].map(MONTH_TO_QUARTER)
-    
+
     return df
 
 
@@ -358,17 +307,12 @@ def _normalize_cause(text: str) -> str:
 
 
 def _split_cause_tokens(text: str) -> list[str]:
-    """ตัดข้อความในวงเล็บออก แล้วแตก '/' เป็น token ย่อย
-    กันเคส cause ที่เขียนคำสลับที่/ไม่ครบคำ เช่น
-    'เลี้ยว/กลับรถ/เปลี่ยนช่องทางกะทันหัน' vs 'เลี้ยว/เปลี่ยนช่องทางกะทันหัน'"""
     text_clean = re.sub(r"\(.*?\)", "", str(text))
     tokens = [t.strip() for t in text_clean.split("/") if t.strip()]
     return tokens if tokens else [text_clean.strip()]
 
 
 def _token_theme(text: str) -> str | None:
-    """แตก cause เป็น token ย่อยก่อน แล้วเทียบแต่ละ token กับ key ของ CAUSE_THEME
-    ด้วย substring สองทาง (token อยู่ใน key หรือ key อยู่ใน token)"""
     tokens = _split_cause_tokens(text)
     for token in tokens:
         for key, theme in CAUSE_THEME.items():
@@ -388,8 +332,6 @@ def _fuzzy_theme(text: str) -> str | None:
 
 
 def _fuzzy_theme_token(text: str) -> str | None:
-    """เหมือน _fuzzy_theme แต่เทียบทีละ token ย่อย ไม่เทียบทั้งประโยค
-    จับเคสคำในแต่ละ token สะกดเพี้ยน/ต่างจาก key เล็กน้อย"""
     if not _RAPIDFUZZ_AVAILABLE:
         return None
     tokens = _split_cause_tokens(text)
@@ -405,7 +347,6 @@ def _fuzzy_theme_token(text: str) -> str | None:
 
 
 def map_theme(cause) -> str | None:
-    """Exact match (ทั้งประโยค) → token exact match → fuzzy (ทั้งประโยค) → fuzzy token → None"""
     if pd.isna(cause):
         return None
     cause = _normalize_cause(cause)
@@ -425,19 +366,12 @@ def map_theme(cause) -> str | None:
 
 
 def apply_theme_mapping(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """
-    เพิ่ม column 'campaign_theme' ใน df
-    คืน (df, unmapped_df)  ← unmapped_df = rows ที่ map ไม่ได้
-    """
     df = df.copy()
     if COL_CAUSE not in df.columns:
         df["campaign_theme"] = np.nan
         return df, pd.DataFrame()
 
     df["campaign_theme"] = df[COL_CAUSE].apply(map_theme)
-    # ============================================================
-    # TIME FEATURE
-    # ============================================================
 
     if COL_MONTH in df.columns:
         df["quarter"] = df[COL_MONTH].map(MONTH_TO_QUARTER)
@@ -457,7 +391,6 @@ def apply_theme_mapping(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
 # ═══════════════════════════════════════════════════════════════════
 
 def _find_sev_col(severity_table: pd.DataFrame) -> str:
-    """หา column 'หยุดงานเกิน3วัน' แบบ safe fallback"""
     target = "หยุดงานเกิน3วัน"
     if target in severity_table.columns:
         return target
@@ -466,32 +399,23 @@ def _find_sev_col(severity_table: pd.DataFrame) -> str:
 
 
 def build_area_summary(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    รัน Risk Score pipeline ทั้งหมด → คืน area_summary DataFrame
-    Columns:
-      severity_pct, defensive_pct, focus_pct, road_pct, speed_pct,
-      *_score, risk_score, priority_level,
-      dominant_theme, recommended_campaign, supporting_campaigns,
-      confidence, reason, insight, insurance_recommendation
-    """
     if COL_AREA not in df.columns or "campaign_theme" not in df.columns:
         return pd.DataFrame()
 
-    # 5.1 Theme % per area
     ct = pd.crosstab(df[COL_AREA], df["campaign_theme"])
     for t in THEMES:
         if t not in ct.columns:
             ct[t] = 0
     theme_pct = (ct.div(ct.sum(axis=1), axis=0) * 100).round(1)
 
-    # 5.2 Severity % per area
     sev_table = (
         pd.crosstab(df[COL_AREA], df[COL_SEVERITY], normalize="index") * 100
     ).round(1)
     sev_col = _find_sev_col(sev_table)
-    severity_pct = sev_table[sev_col]
+    severity_pct = (
+        sev_table[sev_col] if sev_col in sev_table.columns else pd.Series(0, index=ct.index)
+    )
 
-    # 5.3 Impact map (theme → % หยุดงานเกิน3วัน)
     theme_impact_table = (
         pd.crosstab(df["campaign_theme"], df[COL_SEVERITY], normalize="index") * 100
     )
@@ -499,21 +423,19 @@ def build_area_summary(df: pd.DataFrame) -> pd.DataFrame:
         theme_impact_table[sev_col] = 0
     impact_map = theme_impact_table[sev_col].to_dict()
 
-    # 5.4 Build summary
     PCT_MAP = {
-        "Defensive Driving":    "defensive_pct",
-        "Focus & Attention":    "focus_pct",
+        "Defensive Driving": "defensive_pct",
+        "Focus & Attention": "focus_pct",
         "Road & Vehicle Safety": "road_pct",
-        "Speed Awareness":       "speed_pct",
+        "Speed Awareness": "speed_pct",
     }
-    SCORE_MAP = {v.replace("_pct", "_score"): k for k, v in PCT_MAP.items()}
 
     area = pd.DataFrame({
-        "severity_pct":  severity_pct,
-        "defensive_pct": theme_pct.get("Defensive Driving",    0),
-        "focus_pct":     theme_pct.get("Focus & Attention",    0),
-        "road_pct":      theme_pct.get("Road & Vehicle Safety", 0),
-        "speed_pct":     theme_pct.get("Speed Awareness",       0),
+        "severity_pct": severity_pct,
+        "defensive_pct": theme_pct.get("Defensive Driving", 0),
+        "focus_pct": theme_pct.get("Focus & Attention", 0),
+        "road_pct": theme_pct.get("Road & Vehicle Safety", 0),
+        "speed_pct": theme_pct.get("Speed Awareness", 0),
     })
 
     score_cols = []
@@ -522,11 +444,10 @@ def build_area_summary(df: pd.DataFrame) -> pd.DataFrame:
         area[sc] = (area[pct_col] * impact_map.get(theme, 0)).round(2)
         score_cols.append(sc)
 
-    # Risk score (weighted)
     area["risk_score"] = (
         area["severity_pct"] * RISK_WEIGHTS["severity_pct"]
-        + area["road_pct"]   * RISK_WEIGHTS["road_pct"]
-        + area["speed_pct"]  * RISK_WEIGHTS["speed_pct"]
+        + area["road_pct"] * RISK_WEIGHTS["road_pct"]
+        + area["speed_pct"] * RISK_WEIGHTS["speed_pct"]
     ).round(2)
 
     area["priority_level"] = pd.cut(
@@ -535,13 +456,10 @@ def build_area_summary(df: pd.DataFrame) -> pd.DataFrame:
         labels=PRIORITY_LABELS,
     )
 
-    # 5.5 Campaign ranking
     pct_to_theme = {v: k for k, v in PCT_MAP.items()}
     score_to_theme = {v.replace("_pct", "_score"): k for k, v in PCT_MAP.items()}
 
-    area["dominant_theme"] = (
-        area[list(PCT_MAP.values())].idxmax(axis=1).map(pct_to_theme)
-    )
+    area["dominant_theme"] = area[list(PCT_MAP.values())].idxmax(axis=1).map(pct_to_theme)
 
     def _campaign_priority(row):
         ranked = row[score_cols].sort_values(ascending=False)
@@ -556,7 +474,6 @@ def build_area_summary(df: pd.DataFrame) -> pd.DataFrame:
         _campaign_priority, axis=1
     )
 
-    # 5.6 Confidence (top1 / top1+top2)
     sorted_scores = np.sort(area[score_cols].values, axis=1)
     top1, top2 = sorted_scores[:, -1], sorted_scores[:, -2]
     denom = top1 + top2
@@ -564,10 +481,8 @@ def build_area_summary(df: pd.DataFrame) -> pd.DataFrame:
         denom > 0, (top1 / denom * 100).round(1), np.nan
     )
 
-    # 5.7 Reason + Insight
     def generate_reason(row):
         if row["dominant_theme"] == row["recommended_campaign"]:
-        # theme ที่เจอบ่อยสุด กับ theme ที่แนะนำ เป็นตัวเดียวกัน → ใช้ "เช่นกัน" ไม่ใช่ "แต่"
             return (
                 f"พื้นที่นี้มีความเสี่ยงอยู่ในระดับ {row['priority_level']} "
                 f"(Risk Score {row['risk_score']:.1f}) "
@@ -586,7 +501,6 @@ def build_area_summary(df: pd.DataFrame) -> pd.DataFrame:
                 f"จึงควรได้รับการรณรงค์เป็นอันดับแรก"
             )
 
-
     def generate_insight(row):
         return (
             f"• Risk Level : {row['priority_level']} ({row['risk_score']:.1f})\n"
@@ -599,11 +513,9 @@ def build_area_summary(df: pd.DataFrame) -> pd.DataFrame:
             f"• Confidence : {row['confidence']:.1f}%"
         )
 
-
     area["reason"] = area.apply(generate_reason, axis=1)
     area["insight"] = area.apply(generate_insight, axis=1)
 
-    # 5.8 Insurance recommendation
     area["insurance_recommendation"] = area.apply(
         lambda r: AREA_INSURANCE_MAP.get(
             (r["recommended_campaign"], str(r["priority_level"])), "PA พื้นฐาน"
@@ -612,18 +524,9 @@ def build_area_summary(df: pd.DataFrame) -> pd.DataFrame:
     )
 
     return area.sort_values("risk_score", ascending=False)
-# ═══════════════════════════════════════════════════════════════════
-# 5.9 CAUSE DETAIL (ใช้ประกอบ recommended_campaign ให้เห็น cause จริง)
-# ═══════════════════════════════════════════════════════════════════
+
 
 def build_cause_detail(df: pd.DataFrame, top_n: int = 3) -> dict:
-    """
-    หา top cause จริง (ไม่ใช่แค่ theme) แยกตาม (area, theme)
-    ใช้ประกอบ recommended_campaign ให้คนทำ campaign เห็น detail จริง
-    ไม่ใช่แค่ชื่อ theme กว้างๆ อย่าง 'Defensive Driving'
-
-    คืน dict {(area, theme): "cause1 (n ครั้ง) • cause2 (n ครั้ง) • ..."}
-    """
     if (
         COL_AREA not in df.columns
         or "campaign_theme" not in df.columns
@@ -649,11 +552,6 @@ def build_cause_detail(df: pd.DataFrame, top_n: int = 3) -> dict:
 
 
 def attach_cause_detail(area: pd.DataFrame, df: pd.DataFrame, top_n: int = 3) -> pd.DataFrame:
-    """
-    เพิ่ม column 'recommended_campaign_detail' เข้า area_summary
-    โดยดึง top cause จริงของ (area, recommended_campaign) มาต่อท้าย
-    เรียกต่อจาก build_area_summary() ได้เลย
-    """
     area = area.copy()
     if "recommended_campaign" not in area.columns:
         return area
@@ -665,8 +563,9 @@ def attach_cause_detail(area: pd.DataFrame, df: pd.DataFrame, top_n: int = 3) ->
     )
     return area
 
+
 # ═══════════════════════════════════════════════════════════════════
-# 6. RIDER-LEVEL INSURANCE
+# 6. RIDER-LEVEL INSURANCE & PERSONALIZED OUTPUT
 # ═══════════════════════════════════════════════════════════════════
 
 def apply_rider_insurance(df: pd.DataFrame) -> pd.DataFrame:
@@ -680,22 +579,13 @@ def apply_rider_insurance(df: pd.DataFrame) -> pd.DataFrame:
 
     df["insurance_recommendation"] = df.apply(_get, axis=1)
     return df
-# ═══════════════════════════════════════════════════════════════════
-# 6.5 PERSONALIZED OUTPUT (แนบชื่อพนักงานกลับเข้า recommendation)
-# ═══════════════════════════════════════════════════════════════════
+
 
 def build_personalized_output(raw: pd.DataFrame, df: pd.DataFrame) -> pd.DataFrame:
-    """
-    เอาไฟล์ดิบที่มีชื่อ-รหัสพนักงานอยู่แล้ว (raw)
-    มาแปะ column recommendation ที่คำนวณจาก df (cleaned) ต่อท้าย
-      - Campaign ที่ควรได้รับ (มาจาก cause จริงที่เกิดกับคนนั้น)
-      - ประกันที่แนะนำ (มาจาก theme + ความรุนแรงของคนนั้น)
-    ไม่ต้อง join กับไฟล์อื่นเลย เพราะ raw กับ df แถวเรียงตรงกันอยู่แล้ว
-    """
     result = raw.copy()
     rename_map = {
-        COL_CAUSE:                 "สาเหตุที่เกิดขึ้นจริง",
-        "campaign_theme":          "Campaign ที่แนะนำ",
+        COL_CAUSE: "สาเหตุที่เกิดขึ้นจริง",
+        "campaign_theme": "Campaign ที่แนะนำ",
         "insurance_recommendation": "ประกันที่แนะนำ",
     }
     for src_col, out_col in rename_map.items():
@@ -704,9 +594,6 @@ def build_personalized_output(raw: pd.DataFrame, df: pd.DataFrame) -> pd.DataFra
 
     return result
 
-# ═══════════════════════════════════════════════════════════════════
-# 7. JOIN WITH PERSONAL DATA (PII — save to output only)
-# ═══════════════════════════════════════════════════════════════════
 
 def join_personal_data(
     df_accident: pd.DataFrame,
@@ -715,14 +602,9 @@ def join_personal_data(
     bank_sheet,
     join_key: str = COL_EMP_ID,
 ) -> pd.DataFrame:
-    """
-    Join df_accident กับข้อมูลส่วนตัว (bank.xlsx)
-    คืน df ที่ join แล้ว — **ไม่** นำขึ้น dashboard
-    """
     bank_path = Path(bank_folder) / bank_filename
     df_bank = pd.read_excel(bank_path, sheet_name=bank_sheet, engine="openpyxl")
 
-    # normalize join key
     for d in [df_accident, df_bank]:
         if join_key in d.columns:
             d[join_key] = d[join_key].astype(str).str.strip()
@@ -732,7 +614,7 @@ def join_personal_data(
 
 
 # ═══════════════════════════════════════════════════════════════════
-# 8. EXPORT
+# 7. EXPORT & PIPELINE EXECUTION
 # ═══════════════════════════════════════════════════════════════════
 
 def _ts() -> str:
@@ -745,22 +627,16 @@ def export_outputs(
     unmapped: pd.DataFrame,
     df_joined: Optional[pd.DataFrame] = None,
     output_dir: str = OUTPUT_DIR,
-    tag: str = "",                 # e.g.  "2568_Sheet2"
+    tag: str = "",
 ) -> dict[str, str]:
-    """
-    บันทึกไฟล์ทั้งหมดใน output_dir
-    คืน dict {label: filepath} สำหรับแสดงบน Streamlit
-    """
     Path(output_dir).mkdir(parents=True, exist_ok=True)
     suffix = f"_{tag}_{_ts()}" if tag else f"_{_ts()}"
     saved = {}
 
-    # Area summary
     p = Path(output_dir) / OUT_AREA_FILE.replace(".xlsx", f"{suffix}.xlsx")
     area_summary.to_excel(p, index=True)
     saved["area_summary"] = str(p)
 
-    # Rider cleaned (no PII)
     rider_cols = [
         COL_AREA, COL_CAUSE, COL_SEVERITY,
         "campaign_theme", "insurance_recommendation",
@@ -771,13 +647,11 @@ def export_outputs(
     out_rider.to_excel(p2, index=False)
     saved["rider_cleaned"] = str(p2)
 
-    # Unmapped causes
     if not unmapped.empty:
         p3 = Path(output_dir) / OUT_UNMAPPED_FILE.replace(".csv", f"{suffix}.csv")
         unmapped.to_csv(p3, index=False, encoding="utf-8-sig")
         saved["unmapped"] = str(p3)
 
-    # Joined with personal data (PII)
     if df_joined is not None and not df_joined.empty:
         p4 = Path(output_dir) / OUT_JOINED_FILE.replace(".xlsx", f"{suffix}.xlsx")
         df_joined.to_excel(p4, index=False)
@@ -785,10 +659,6 @@ def export_outputs(
 
     return saved
 
-
-# ═══════════════════════════════════════════════════════════════════
-# 9. FULL PIPELINE (one-call convenience)
-# ═══════════════════════════════════════════════════════════════════
 
 def run_pipeline(
     data_folder: str,
@@ -799,40 +669,20 @@ def run_pipeline(
     bank_sheet=0,
     output_dir: str = OUTPUT_DIR,
 ) -> dict:
-    """
-    รัน pipeline ทั้งหมด → คืน dict ที่ app.py ใช้แสดงผล
-
-    Returns
-    -------
-    {
-        "df":           pd.DataFrame,   # rider-level (no PII)
-        "raw_with_id":  pd.DataFrame,   # for join_personal_data (PII) only
-        "area_summary": pd.DataFrame,
-        "unmapped":     pd.DataFrame,
-        "saved_files":  dict[str, str],
-        "tag":          str,
-    }
-    """
     tag = f"{Path(data_filename).stem}_sheet{data_sheet}"
 
-    # Load + clean + feature eng
     raw = load_raw(data_folder, data_filename, data_sheet)
     df, col_report = clean(raw)
-    df  = feature_engineer(df)
+    df = feature_engineer(df)
 
     raw_with_id, _ = resolve_columns(raw.copy())
 
-    # Theme mapping
     df, unmapped = apply_theme_mapping(df)
-
-    # Rider insurance
     df = apply_rider_insurance(df)
 
-    # Area summary
     area_summary = build_area_summary(df)
     area_summary = attach_cause_detail(area_summary, df, top_n=3)
 
-    # Optional PII join (save to output only — ไม่ return ขึ้น dashboard)
     df_joined = None
     if bank_folder and bank_filename:
         try:
@@ -840,68 +690,43 @@ def run_pipeline(
                 raw_with_id, bank_folder, bank_filename, bank_sheet
             )
         except Exception as e:
-            print(f"⚠️  Join PII failed: {e}")
+            print(f"⚠️ Join PII failed: {e}")
 
-    # Export
     saved = export_outputs(
         area_summary, df, unmapped, df_joined,
         output_dir=output_dir, tag=tag,
     )
 
     return {
-        "df":           df,
-        "raw_with_id":  raw_with_id,
+        "df": df,
+        "raw_with_id": raw_with_id,
         "area_summary": area_summary,
-        "unmapped":     unmapped,
-        "saved_files":  saved,
-        "col_report":   col_report,
-        "tag":          tag,
+        "unmapped": unmapped,
+        "saved_files": saved,
+        "col_report": col_report,
+        "tag": tag,
     }
 
-# ============================================================
-# FORECAST DATASET
-# ============================================================
 
 def prepare_forecast_dataset(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    เตรียม Dataset สำหรับ Machine Learning Forecast
-    Target = campaign_theme
-    """
-
     feature_cols = [
-
         "year",
         "quarter",
-
         COL_AREA,
-
         "rider_exp_group",
-
         COL_VEHICLE,
-
         COL_PERIOD,
-
         COL_VISIBILITY,
-
         COL_ROAD_SURFACE,
-
         COL_ROAD_TYPE,
-
         COL_TRAFFIC,
-
         COL_SPEED_GROUP,
-
         COL_4M1E,
-
     ]
 
     feature_cols = [c for c in feature_cols if c in df.columns]
+    train_df = df[feature_cols + ["campaign_theme"]].copy()
 
-    train_df = df[
-        feature_cols + ["campaign_theme"]
-    ].copy()
-
-    # เติม Unknown ให้ Feature ที่ขาด
     fill_cols = [
         "rider_exp_group",
         COL_VISIBILITY,
@@ -914,18 +739,11 @@ def prepare_forecast_dataset(df: pd.DataFrame) -> pd.DataFrame:
     for c in fill_cols:
         if c in train_df.columns:
             train_df[c] = (
-            train_df[c]
-            .astype(str)
-            .replace("nan", "Unknown")
-            .replace("<NA>", "Unknown")
-        )
+                train_df[c]
+                .astype(str)
+                .replace("nan", "Unknown")
+                .replace("<NA>", "Unknown")
+            )
 
-    # ลบเฉพาะแถวที่ไม่มี Target
-    train_df = train_df.dropna(
-        subset=[
-            "campaign_theme",
-            COL_4M1E,
-        ]
-    )
-
+    train_df = train_df.dropna(subset=["campaign_theme", COL_4M1E])
     return train_df
