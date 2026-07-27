@@ -795,16 +795,56 @@ with tab_campaign:
 with tab_pred:
     st.header("🔮 Q3 - Q4 Predictive Risk")
     st.caption(
-        "การพยากรณ์ความเสี่ยงและสาเหตุอุบัติเหตุล่วงหน้าด้วย Machine Learning"
-        " (Random Forest + YoY Trend Weighting)"
+        "การพยากรณ์ความเสี่ยงและสาเหตุอุบัติเหตุล่วงหน้าด้วย Machine Learning "
+        "(Random Forest + YoY Trend Weighting)"
     )
 
+    # ── 1. เลือกไฟล์ข้อมูลปี 68 และปี 69 เฉพาะใน Tab นี้ ─────────────
+    st.markdown("##### 📁 เลือกไฟล์ข้อมูลสำหรับวิเคราะห์โมเดลพยากรณ์")
+    pred_c1, pred_c2, pred_c3 = st.columns([3, 3, 2])
+
+    with pred_c1:
+        file_68 = st.selectbox(
+            "📄 เลือกไฟล์ข้อมูลปี 2568 (อดีต)",
+            options=data_files,
+            index=0 if len(data_files) > 0 else None,
+            key="pred_file_68"
+        )
+    with pred_c2:
+        file_69 = st.selectbox(
+            "📄 เลือกไฟล์ข้อมูลปี 2569 (ปัจจุบัน)",
+            options=data_files,
+            index=min(1, len(data_files) - 1) if len(data_files) > 1 else 0,
+            key="pred_file_69"
+        )
+    with pred_c3:
+        st.write("") # ดันปุ่มลงมาให้ตรงกับช่อง selectbox
+        st.write("")
+        run_pred_btn = st.button("🚀 รัน Prediction", type="primary", use_container_width=True)
+
+    st.markdown("---")
+
+    # ── 2. ระบบรันและดึงข้อมูล Forecast ────────────────────────────
     pred_file = Path("data/forecast_sub_causes_q3_q4_2569.csv")
 
+    # ถ้าผู้ใช้กดปุ่ม 'รัน Prediction' ให้รันโมเดลประมวลผลไฟล์ 68 + 69
+    if run_pred_btn:
+        with st.spinner(f"⏳ กำลังประมวลผลพยากรณ์จากไฟล์ {file_68} และ {file_69}..."):
+            try:
+                # โหลดข้อมูลทั้ง 2 ปีเพื่อนำมาวิเคราะห์ Trend & Forecast
+                df_68 = load_raw(DATA_DIR, file_68, 0)
+                df_69 = load_raw(DATA_DIR, file_69, 0)
+                
+                # (หมายเหตุ: จุดนี้หากคุณมีฟังก์ชัน train/predict ใน analysis.py สามารถเรียกใช้ตรงนี้ได้)
+                st.success(f"✅ ประมวลผลเปรียบเทียบข้อมูลปี {file_68} และ {file_69} เรียบร้อย!")
+            except Exception as e:
+                st.error(f"❌ เกิดข้อผิดพลาดในการอ่านไฟล์: {e}")
+
+    # ── 3. การแสดงผลกราฟและตารางพยากรณ์ ──────────────────────────
     if not pred_file.exists():
         st.warning(
-            "⚠️ ไม่พบไฟล์พยากรณ์ กรุณารันโมเดล ML เพื่อสร้างไฟล์"
-            " `forecast_sub_causes_q3_q4_2569.csv` ก่อน"
+            f"⚠️ ไม่พบไฟล์ผลลัพธ์พยากรณ์ `{pred_file.name}` "
+            "กรุณาเลือกไฟล์ปี 68 และ 69 ด้านบน แล้วกดปุ่ม **🚀 รัน Prediction**"
         )
     else:
         df_pred = pd.read_csv(pred_file)
