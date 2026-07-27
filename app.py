@@ -22,6 +22,8 @@ from analysis import (
     natural_sort_key,
     run_pipeline,
     load_raw,
+    clean,
+    apply_theme_mapping,
 )
 from config import COL_AREA, COL_CAUSE, COL_MONTH, COL_SEVERITY, OUTPUT_DIR, THEMES
 
@@ -828,18 +830,58 @@ with tab_pred:
     # ── 2. ระบบรันและดึงข้อมูล Forecast ────────────────────────────
     pred_file = Path("data/forecast_sub_causes_q3_q4_2569.csv")
 
-    # ถ้าผู้ใช้กดปุ่ม 'รัน Prediction' ให้รันโมเดลประมวลผลไฟล์ 68 + 69
     if run_pred_btn:
         with st.spinner(f"⏳ กำลังประมวลผลพยากรณ์จากไฟล์ {file_68} และ {file_69}..."):
             try:
-                # โหลดข้อมูลทั้ง 2 ปีเพื่อนำมาวิเคราะห์ Trend & Forecast
                 df_68 = load_raw(DATA_DIR, file_68, 0)
                 df_69 = load_raw(DATA_DIR, file_69, 0)
                 
-                # (หมายเหตุ: จุดนี้หากคุณมีฟังก์ชัน train/predict ใน analysis.py สามารถเรียกใช้ตรงนี้ได้)
-                st.success(f"✅ ประมวลผลเปรียบเทียบข้อมูลปี {file_68} และ {file_69} เรียบร้อย!")
+                # 📌 ทำการคำนวณ/ประมวลผล หรือรันฟังก์ชัน ML ตรงนี้
+                # ตัวอย่าง: สร้าง DataFrame ผลลัพธ์พยากรณ์ขึ้นมาจากข้อมูลจริง
+                df_68, _ = clean(df_68)
+                df_69, _ = clean(df_69)
+                df_68, _ = apply_theme_mapping(df_68)
+                df_69, _ = apply_theme_mapping(df_69)
+
+                # สรุปอัตราส่วนความเสี่ยงเพื่อนำมาพยากรณ์ Q3-Q4
+                forecast_records = []
+                areas = df_69[COL_AREA].dropna().unique() if COL_AREA in df_69.columns else []
+
+                for a in areas:
+                    sub_68 = df_68[df_68[COL_AREA] == a] if COL_AREA in df_68.columns else df_68
+                    sub_69 = df_69[df_69[COL_AREA] == a] if COL_AREA in df_69.columns else df_69
+                    
+                    # คำนวณ Trend Multiplier YoY (ปี 69 เทียบกับ ปี 68)
+                    count_68 = max(len(sub_68), 1)
+                    count_69 = len(sub_69)
+                    multiplier = round(count_69 / count_68, 2)
+
+                    # สรุปสาเหตุย่อยและ Theme
+                    causes = sub_69[COL_CAUSE].value_counts().head(3) if COL_CAUSE in sub_69.columns else []
+                    for cause, cnt in causes.items():
+                        theme = map_theme(cause) or "Focus & Attention"
+                        prob = min(round((cnt / max(count_69, 1)) * 100 * (1 + (multiplier - 1) * 0.2), 1), 100.0)
+                        
+                        for q in ["Q3", "Q4"]:
+                            forecast_records.append({
+                                "Quarter": q,
+                                "พื้นที่": a,
+                                "Sub_Cause (สาเหตุย่อย)": cause,
+                                "Predicted_Theme": theme,
+                                "Estimated_Cause_Probability (%)": prob,
+                                "Q1-Q2_Trend_Multiplier": multiplier
+                            })
+
+                # เซฟเป็นไฟล์ CSV ทันทีเพื่อให้อ่านขึ้นมาแสดงผลด้านล่างได้
+                if forecast_records:
+                    df_out = pd.DataFrame(forecast_records)
+                    df_out.to_csv(pred_file, index=False, encoding="utf-8-sig")
+                    st.success("✅ พยากรณ์ข้อมูลสำเร็จและบันทึกผลลัพธ์เรียบร้อย!")
+                else:
+                    st.warning("⚠️ ข้อมูลในไฟล์ไม่เพียงพอสำหรับการสร้างกราฟพยากรณ์")
+
             except Exception as e:
-                st.error(f"❌ เกิดข้อผิดพลาดในการอ่านไฟล์: {e}")
+                st.error(f"❌ เกิดข้อผิดพลาดในการประมวลผล: {e}")
 
     # ── 3. การแสดงผลกราฟและตารางพยากรณ์ ──────────────────────────
     if not pred_file.exists():
